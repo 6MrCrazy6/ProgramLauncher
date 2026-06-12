@@ -1,0 +1,8 @@
+{
+    "theme": "Dark",
+    "color_theme": "dark-blue",
+    "close_after_launch": false,
+    "minimize_to_tray": true,
+    "delay": 5,
+    "windows_autostart": true
+}
