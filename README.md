@@ -153,6 +153,6 @@ Email: devilyumeko42@gmail.com
 
 Copyright © 2026 Inna Varchenko
 
-Проєкт розповсюджується відповідно до умов ліцензії Apache License 2.0.
+Проєкт розповсюджується відповідно до умов ліцензії PolyForm Noncommercial License 1.0.0.
 
 Детальні умови наведені у файлі [LICENSE](LICENSE).
