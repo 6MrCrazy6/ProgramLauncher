@@ -100,27 +100,40 @@ def setup_windows_dnd(window, callback):
 
 # --- ФУНКЦІЯ СТАРТОВОГО ПІДВАНТАЖЕННЯ ТЕМИ ---
 def pre_apply_theme():
-    settings_file = "jsons_saves/settings.json"
-    os.makedirs("themes", exist_ok=True)
+    if getattr(sys, "frozen", False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    settings_dir = os.path.join(base_dir, "jsons_saves")
+    themes_dir = os.path.join(base_dir, "themes")
+    settings_file = os.path.join(settings_dir, "settings.json")
+
+    os.makedirs(themes_dir, exist_ok=True)
+    os.makedirs(settings_dir, exist_ok=True)
 
     if os.path.exists(settings_file):
         try:
             with open(settings_file, "r", encoding="utf-8") as f:
                 st = json.load(f)
-                ctk.set_appearance_mode(st.get("theme", "Dark"))
-                color_theme = st.get("color_theme", "blue")
-                if color_theme not in ["blue", "green", "dark-blue"]:
-                    theme_path = f"themes/{color_theme}.json"
-                    if os.path.exists(theme_path):
-                        ctk.set_default_color_theme(theme_path)
-                        return
-                ctk.set_default_color_theme(color_theme)
-                return
-        except:
+
+            ctk.set_appearance_mode(st.get("theme", "Dark"))
+            color_theme = st.get("color_theme", "blue")
+
+            if color_theme not in ["blue", "green", "dark-blue"]:
+                theme_path = os.path.join(themes_dir, f"{color_theme}.json")
+                if os.path.exists(theme_path):
+                    ctk.set_default_color_theme(theme_path)
+                    return
+
+            ctk.set_default_color_theme(color_theme)
+            return
+
+        except Exception:
             pass
+
     ctk.set_appearance_mode("Dark")
     ctk.set_default_color_theme("blue")
-
 
 pre_apply_theme()
 
@@ -247,8 +260,19 @@ setup_windows_dnd(app, on_files_dropped_native)
 
 
 def save_programs():
+    if getattr(sys, "frozen", False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    settings_dir = os.path.join(base_dir, "jsons_saves")
+    os.makedirs(settings_dir, exist_ok=True)
+
+    programs_file = os.path.join(settings_dir, "checkbox_programs.json")
+
     data = [{"name": p["name"], "path": p["path"]} for p in programs]
-    with open("jsons_saves/checkbox_programs.json", "w", encoding="utf-8") as file:
+
+    with open(programs_file, "w", encoding="utf-8") as file:
         json.dump(data, file, indent=4, ensure_ascii=False)
 
 
@@ -298,43 +322,72 @@ def delete_single_program(program_to_delete):
 
 def load_programs():
     global programs
+
+    if getattr(sys, "frozen", False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    settings_dir = os.path.join(base_dir, "jsons_saves")
+    programs_file = os.path.join(settings_dir, "checkbox_programs.json")
+
     try:
-        with open("jsons_saves/checkbox_programs.json", "r", encoding="utf-8") as file:
+        with open(programs_file, "r", encoding="utf-8") as file:
             raw_data = json.load(file)
-            programs = [{"name": item["name"], "path": item["path"], "checkbox": None} for item in raw_data]
+            programs = [
+                {
+                    "name": item["name"],
+                    "path": item["path"],
+                    "checkbox": None
+                }
+                for item in raw_data
+            ]
     except:
         programs = []
+
     refresh_programs()
 
 
 def check_and_run_autostart():
-    presets_file = "jsons_saves/presets.json"
-    settings_file = "jsons_saves/settings.json"
+    if getattr(sys, "frozen", False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    settings_dir = os.path.join(base_dir, "jsons_saves")
+    presets_file = os.path.join(settings_dir, "presets.json")
+    settings_file = os.path.join(settings_dir, "settings.json")
 
     if os.path.exists(presets_file) and os.path.getsize(presets_file) > 0:
         try:
             delay = 0
             close_after = False
+
             if os.path.exists(settings_file):
-                with open(settings_file, "r") as sf:
+                with open(settings_file, "r", encoding="utf-8") as sf:
                     st = json.load(sf)
                     delay = st.get("delay", 0)
                     close_after = st.get("close_after_launch", False)
 
             with open(presets_file, "r", encoding="utf-8") as file:
                 presets = json.load(file)
-                for name, data in presets.items():
-                    if isinstance(data, dict) and data.get("autostart", False):
-                        for idx, path in enumerate(data.get("programs", [])):
-                            if idx > 0 and delay > 0:
-                                time.sleep(delay)
-                            try:
-                                os.startfile(path)
-                            except Exception as e:
-                                print(f"Не вдалося запустити {path}: {e}")
-                        if close_after:
-                            exit_program()
-                        break
+
+            for name, data in presets.items():
+                if isinstance(data, dict) and data.get("autostart", False):
+                    for idx, path in enumerate(data.get("programs", [])):
+                        if idx > 0 and delay > 0:
+                            time.sleep(delay)
+
+                        try:
+                            os.startfile(path)
+                        except Exception as e:
+                            print(f"Не вдалося запустити {path}: {e}")
+
+                    if close_after:
+                        exit_program()
+
+                    break
+
         except Exception as e:
             print(f"Помилка зчитування автозапуску: {e}")
 
@@ -352,11 +405,19 @@ def add_program():
 
 
 def launch_selected():
+    if getattr(sys, "frozen", False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    settings_file = os.path.join(base_dir, "jsons_saves", "settings.json")
+
     delay = 0
     close_after = False
-    if os.path.exists("jsons_saves/settings.json"):
+
+    if os.path.exists(settings_file):
         try:
-            with open("jsons_saves/settings.json", "r") as f:
+            with open(settings_file, "r", encoding="utf-8") as f:
                 st = json.load(f)
                 delay = st.get("delay", 0)
                 close_after = st.get("close_after_launch", False)
@@ -364,15 +425,18 @@ def launch_selected():
             pass
 
     launched_any = False
+
     for program in programs:
         if program["checkbox"] and program["checkbox"].get() == 1:
             if launched_any and delay > 0:
                 time.sleep(delay)
+
             try:
                 os.startfile(program["path"])
                 launched_any = True
             except:
                 pass
+
     if launched_any and close_after:
         exit_program()
 

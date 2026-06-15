@@ -276,7 +276,11 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
         }
 
         try:
-            with open(f"themes/{name}.json", "w", encoding="utf-8") as f:
+            base_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(
+                os.path.abspath(__file__))
+            themes_dir = os.path.join(base_dir, "themes")
+            os.makedirs(themes_dir, exist_ok=True)
+            with open(os.path.join(themes_dir, f"{name}.json"), "w", encoding="utf-8") as f:
                 json.dump(theme_structure, f, indent=4)
             self.on_save_callback(name)
             self.destroy()
@@ -290,11 +294,18 @@ class SettingsManager(ctk.CTkFrame):
         self.app = master
         self.restart_callback_func = restart_callback
 
-        self.settings_file = "jsons_saves/settings.json"
-        self.themes_dir = "themes"
+        # Базовая папка программы
+        if getattr(sys, "frozen", False):
+            self.base_dir = os.path.dirname(sys.executable)
+        else:
+            self.base_dir = os.path.dirname(os.path.abspath(__file__))
+
+        self.settings_dir = os.path.join(self.base_dir, "jsons_saves")
+        self.themes_dir = os.path.join(self.base_dir, "themes")
+        self.settings_file = os.path.join(self.settings_dir, "settings.json")
 
         os.makedirs(self.themes_dir, exist_ok=True)
-        os.makedirs("jsons_saves", exist_ok=True)
+        os.makedirs(self.settings_dir, exist_ok=True)
 
         self.default_settings = {
             "theme": "Dark",
@@ -506,7 +517,7 @@ class SettingsManager(ctk.CTkFrame):
             return False
 
     def create_backup(self):
-        source_dir = "jsons_saves"
+        source_dir = self.settings_dir
         if not os.path.exists(source_dir) or not os.listdir(source_dir):
             messagebox.showwarning("Бекап", "Немає збережених налаштувань чи розкладів для резервного копіювання!")
             return
@@ -537,7 +548,7 @@ class SettingsManager(ctk.CTkFrame):
         if messagebox.askyesno("Відновлення",
                                "Поточні налаштування, розклад та наборы будуть повністю замінені даними з архіву. Продовжити?"):
             try:
-                target_dir = "jsons_saves"
+                target_dir = self.settings_dir
                 os.makedirs(target_dir, exist_ok=True)
 
                 with zipfile.ZipFile(file_path, 'r') as zipf:
