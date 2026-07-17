@@ -1,15 +1,36 @@
 import customtkinter as ctk
 import os
+import sys
 import json
 import time
+import threading
 from datetime import datetime
+
+
+def get_base_dir():
+    """ Повертає теку, де реально лежить .exe (при білді) або .py скрипт.
+    Це важливо для портативного білда без інсталятора: exe можуть запустити
+    не з його "рідної" робочої директорії (наприклад, через ярлик автозавантаження
+    з іншим "Start in"), тож шляхи до jsons_saves треба рахувати від sys.executable,
+    а не покладатися на відносний шлях. """
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
 
 class ScheduleManager(ctk.CTkFrame):
     def __init__(self, parent, exit_program_callback):
         super().__init__(parent, fg_color="transparent")
         self.exit_program_callback = exit_program_callback
-        self.db_path = "jsons_saves/schedule.json"
+
+        self.base_dir = get_base_dir()
+        self.db_path = os.path.join(self.base_dir, "jsons_saves", "schedule.json")
+
+        # Лок для безпечного читання/запису json одночасно з головного потоку (UI)
+        # та фонового потоку перевірки розкладу
+        self._file_lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._worker_thread = None
 
         self.available_programs = []
         self.available_presets = []
@@ -21,7 +42,7 @@ class ScheduleManager(ctk.CTkFrame):
         }
         self.days_list = list(self.days_map.keys())
 
-        os.makedirs("jsons_saves", exist_ok=True)
+        os.makedirs(os.path.join(self.base_dir, "jsons_saves"), exist_ok=True)
 
         # --- UI ЕЛЕМЕНТИ ---
         title = ctk.CTkLabel(self, text="⏰ Налаштування розкладу та днів", font=ctk.CTkFont(size=16, weight="bold"))
@@ -90,7 +111,7 @@ class ScheduleManager(ctk.CTkFrame):
     def update_data_lists(self, current_programs):
         self.available_programs = current_programs
         self.available_presets = []
-        presets_file = "jsons_saves/presets.json"
+        presets_file = os.path.join(self.base_dir, "jsons_saves", "presets.json")
         if os.path.exists(presets_file):
             try:
                 with open(presets_file, "r", encoding="utf-8") as f:
@@ -195,17 +216,21 @@ class ScheduleManager(ctk.CTkFrame):
         self.load_and_refresh_ui()
 
     def read_json(self):
-        if os.path.exists(self.db_path):
-            try:
-                with open(self.db_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except:
-                pass
-        return []
+        # Лок тут, бо цей метод викликається і з головного потоку (UI),
+        # і з фонового потоку перевірки розкладу
+        with self._file_lock:
+            if os.path.exists(self.db_path):
+                try:
+                    with open(self.db_path, "r", encoding="utf-8") as f:
+                        return json.load(f)
+                except:
+                    pass
+            return []
 
     def write_json(self, data):
-        with open(self.db_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+        with self._file_lock:
+            with open(self.db_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
 
     def is_current_day_in_range(self, start_day_name, end_day_name):
         """ Перевіряє, чи входить сьогоднішній день у налаштований діапазон """
@@ -222,6 +247,40 @@ class ScheduleManager(ctk.CTkFrame):
             return current_day_idx >= start_idx or current_day_idx <= end_idx
 
     def start_checking_loop(self):
+        """ Запускає фоновий потік перевірки розкладу.
+        UI (customtkinter/Tkinter) залишається повністю відповідним,
+        навіть якщо запуск пресету з великою затримкою між програмами
+        триває довго — бо time.sleep() тепер виконується НЕ в головному потоці. """
+        if self._worker_thread and self._worker_thread.is_alive():
+            return  # Потік уже запущено — не дублюємо
+
+        self._stop_event.clear()
+        self._worker_thread = threading.Thread(target=self._background_worker, daemon=True)
+        self._worker_thread.start()
+
+    def stop_checking_loop(self):
+        """ Коректна зупинка фонового потоку. Бажано викликати перед виходом
+        з програми (наприклад, з exit_program() у ProgramLauncherStart.py),
+        хоча потік і так daemon і не завадить процесу завершитись. """
+        self._stop_event.set()
+
+    def _background_worker(self):
+        """ !!! ЦЯ ФУНКЦІЯ ВИКОНУЄТЬСЯ У ФОНОВОМУ ПОТОЦІ, А НЕ В ГОЛОВНОМУ !!!
+        Тут можна безпечно робити time.sleep() на довільний час — інтерфейс
+        від цього не "зависне", бо Tkinter mainloop працює окремо в головному потоці.
+        Напряму чіпати CTk-віджети звідси НЕ МОЖНА — будь-яке оновлення UI
+        повертаємо в головний потік через self.after(0, ...). """
+        while not self._stop_event.is_set():
+            try:
+                self._check_and_run_tasks()
+            except Exception as e:
+                print(f"Помилка фонового потоку розкладу: {e}")
+
+            # Чекаємо 20 секунд між перевірками, але перериваємось миттєво,
+            # якщо надійшла команда зупинки (stop_checking_loop)
+            self._stop_event.wait(20)
+
+    def _check_and_run_tasks(self):
         now = datetime.now()
         current_time_str = now.strftime("%H:%M")
 
@@ -234,12 +293,12 @@ class ScheduleManager(ctk.CTkFrame):
                     t["triggered_today"] = False
                     updated = True
 
-        settings_file = "jsons_saves/settings.json"
+        settings_file = os.path.join(self.base_dir, "jsons_saves", "settings.json")
         delay = 0
         close_after = False
         if os.path.exists(settings_file):
             try:
-                with open(settings_file, "r") as sf:
+                with open(settings_file, "r", encoding="utf-8") as sf:
                     st = json.load(sf)
                     delay = st.get("delay", 0)
                     close_after = st.get("close_after_launch", False)
@@ -251,7 +310,7 @@ class ScheduleManager(ctk.CTkFrame):
         for t in tasks:
             if t["time"] == current_time_str and not t.get("triggered_today", False):
 
-                # НОВА ПЕРЕВІРКА: Чи підходить сьогоднішній день тижня під налаштування завдання?
+                # Чи підходить сьогоднішній день тижня під налаштування завдання?
                 s_day = t.get("start_day", "Понеділок")
                 e_day = t.get("end_day", "П'ятниця")
 
@@ -271,7 +330,7 @@ class ScheduleManager(ctk.CTkFrame):
 
                 # Запуск пресету
                 elif t.get("type") == "preset":
-                    presets_file = "jsons_saves/presets.json"
+                    presets_file = os.path.join(self.base_dir, "jsons_saves", "presets.json")
                     if os.path.exists(presets_file):
                         try:
                             with open(presets_file, "r", encoding="utf-8") as pf:
@@ -281,6 +340,7 @@ class ScheduleManager(ctk.CTkFrame):
                                 if target_preset and "programs" in target_preset:
                                     for idx, p_path in enumerate(target_preset["programs"]):
                                         if idx > 0 and delay > 0:
+                                            # Безпечно: ми в фоновому потоці, GUI не завмирає
                                             time.sleep(delay)
                                         try:
                                             os.startfile(p_path)
@@ -295,9 +355,10 @@ class ScheduleManager(ctk.CTkFrame):
 
         if updated:
             self.write_json(tasks)
+            # Оновлення списку завдань у вкладці "Розклад" — обов'язково
+            # через after(), щоб виконати цей код у головному (UI) потоці
+            self.after(0, self.load_and_refresh_ui)
 
         if launched_something and close_after:
-            self.exit_program_callback()
-            return
-
-        self.after(20000, self.start_checking_loop)
+            # Так само: закриття програми теж повертаємо в головний потік
+            self.after(0, self.exit_program_callback)

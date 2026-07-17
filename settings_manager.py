@@ -5,6 +5,7 @@ import json
 import sys
 import shutil
 import zipfile  # Модуль для роботи з резервними копіями
+import tempfile  # Для безпечної перевірки бекапу перед його застосуванням
 import winreg  # Модуль для роботи з автозапуском Windows
 import subprocess
 
@@ -14,7 +15,8 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
         super().__init__(parent)
         self.title("Гнучкий конструктор теми")
         self.geometry("480x820")
-        self.resizable(False, False)
+        self.minsize(400, 500)
+        self.resizable(True, True)
 
         self.transient(parent)
         self.grab_set()
@@ -318,6 +320,10 @@ class SettingsManager(ctk.CTkFrame):
 
         self.ensure_base_theme_exists()
         self.create_widgets()
+        # Якщо лаунчер вже в автозапуску, але його перемістили/оновили —
+        # актуалізуємо шлях у реєстрі ДО того, як зчитаємо стан чекбоксів,
+        # щоб автозапуск не "мовчки" ламався через застарілий шлях.
+        self.sync_autostart_path()
         self.load_and_apply_saved_widgets()
 
     def ensure_base_theme_exists(self):
@@ -437,12 +443,26 @@ class SettingsManager(ctk.CTkFrame):
                                               command=self.save_settings)
         self.close_checkbox.pack(pady=4, padx=10, fill="x", anchor="w")
 
-        self.tray_checkbox = ctk.CTkCheckBox(self.behavior_box, text="Ховати в трей при натисканні на 'хрестик'",
-                                             command=self.update_close_protocol)
-        self.tray_checkbox.pack(pady=4, padx=10, fill="x", anchor="w")
+        self.tray_checkbox = ctk.CTkCheckBox(
+            self.behavior_box,
+            text="Не закривати, а згортати у фоновий режим (трей) при натисканні ❌",
+            command=self.update_close_protocol
+        )
+        self.tray_checkbox.pack(pady=(4, 0), padx=10, fill="x", anchor="w")
 
-        self.autostart_checkbox = ctk.CTkCheckBox(self.behavior_box, text="Запускати лаунчер разом із Windows",
-                                                  command=self.toggle_windows_autostart)
+        tray_hint = ctk.CTkLabel(
+            self.behavior_box,
+            text="Трей — це значок біля годинника Windows. Потрібно увімкнути,\n"
+                 "щоб розклад продовжував працювати після закриття вікна.",
+            font=(None, 10), text_color="gray", justify="left", anchor="w"
+        )
+        tray_hint.pack(pady=(0, 6), padx=28, fill="x", anchor="w")
+
+        self.autostart_checkbox = ctk.CTkCheckBox(
+            self.behavior_box,
+            text="Автоматично запускати лаунчер при вмиканні Windows",
+            command=self.toggle_windows_autostart
+        )
         self.autostart_checkbox.pack(pady=4, padx=10, fill="x", anchor="w")
 
         # 4. Затримка
@@ -516,6 +536,47 @@ class SettingsManager(ctk.CTkFrame):
         except FileNotFoundError:
             return False
 
+    def sync_autostart_path(self):
+        """ Якщо лаунчер вже прописаний в автозапуск Windows, перевіряє,
+        чи шлях у реєстрі відповідає поточному розташуванню файлу.
+        Якщо папку з програмою перемістили або оновили версію (exe
+        перезібрали в іншу теку) — шлях у реєстрі стає застарілим,
+        і автозапуск перестає працювати без жодної помилки для
+        користувача. Тому при кожному старті звіряємо і, якщо треба,
+        тихо оновлюємо значення в реєстрі на актуальне. """
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        app_name = "CustomProgramLauncher"
+
+        if getattr(sys, 'frozen', False):
+            current_path = sys.executable
+        else:
+            current_path = os.path.abspath(sys.argv[0])
+        expected_value = f'"{current_path}"'
+
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
+            try:
+                saved_value, _ = winreg.QueryValueEx(key, app_name)
+            finally:
+                winreg.CloseKey(key)
+        except FileNotFoundError:
+            # Автозапуск вимкнено — синхронізувати нічого
+            return
+        except Exception as e:
+            print(f"Автозапуск: не вдалося прочитати шлях з реєстру: {e}")
+            return
+
+        if saved_value == expected_value:
+            return
+
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+            winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, expected_value)
+            winreg.CloseKey(key)
+            print(f"Автозапуск: шлях у реєстрі застарів і був оновлений на '{current_path}'.")
+        except Exception as e:
+            print(f"Автозапуск: не вдалося оновити застарілий шлях у реєстрі: {e}")
+
     def create_backup(self):
         source_dir = self.settings_dir
         if not os.path.exists(source_dir) or not os.listdir(source_dir):
@@ -547,17 +608,69 @@ class SettingsManager(ctk.CTkFrame):
 
         if messagebox.askyesno("Відновлення",
                                "Поточні налаштування, розклад та наборы будуть повністю замінені даними з архіву. Продовжити?"):
+            # Спочатку розпаковуємо у тимчасову папку (а не одразу в робочу
+            # директорію) і перевіряємо коректність усіх json-файлів.
+            # Це захищає від ситуації, коли пошкоджений/невірний архів
+            # затирає робочі дані і ламає запуск програми наступного разу.
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                try:
+                    with zipfile.ZipFile(file_path, 'r') as zipf:
+                        zipf.extractall(tmp_dir)
+                except Exception as e:
+                    messagebox.showerror("Помилка", f"Не вдалося розархівувати дані: {e}")
+                    return
+
+                is_valid, error_msg = self.validate_backup_data(tmp_dir)
+                if not is_valid:
+                    messagebox.showerror(
+                        "Помилка",
+                        "Файл резервної копії пошкоджений або має невірний формат.\n"
+                        f"{error_msg}\n\nВідновлення скасовано, поточні дані не змінено."
+                    )
+                    return
+
+                try:
+                    target_dir = self.settings_dir
+                    os.makedirs(target_dir, exist_ok=True)
+
+                    for file in os.listdir(tmp_dir):
+                        src = os.path.join(tmp_dir, file)
+                        if os.path.isfile(src):
+                            shutil.copy2(src, os.path.join(target_dir, file))
+
+                    messagebox.showinfo("Успіх",
+                                        "Конфігурацію відновлено! Натисніть кнопку перезапуску програми для застосування змін.")
+                except Exception as e:
+                    messagebox.showerror("Помилка", f"Не вдалося застосувати дані з бекапу: {e}")
+
+    def validate_backup_data(self, folder):
+        """ Перевіряє json-файли з бекапу (settings.json, presets.json,
+        schedule.json) на валідність та очікувану структуру ПЕРЕД тим,
+        як вони замінять робочі дані лаунчера. Файли, яких немає в
+        архіві, пропускаються — це не критично (стара версія бекапу). """
+        expected_structure = {
+            "settings.json": dict,
+            "presets.json": dict,
+            "schedule.json": list,
+        }
+
+        for filename, expected_type in expected_structure.items():
+            path = os.path.join(folder, filename)
+            if not os.path.exists(path):
+                continue
+
             try:
-                target_dir = self.settings_dir
-                os.makedirs(target_dir, exist_ok=True)
-
-                with zipfile.ZipFile(file_path, 'r') as zipf:
-                    zipf.extractall(target_dir)
-
-                messagebox.showinfo("Успіх",
-                                    "Конфігурацію відновлено! Натисніть кнопку перезапуску програми для застосування змін.")
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                return False, f"Файл '{filename}' не є коректним JSON ({e})"
             except Exception as e:
-                messagebox.showerror("Помилка", f"Не вдалося розархівувати дані: {e}")
+                return False, f"Не вдалося прочитати файл '{filename}' ({e})"
+
+            if not isinstance(data, expected_type):
+                return False, f"Файл '{filename}' має неочікувану структуру даних"
+
+        return True, ""
 
     def open_theme_creator(self):
         ThemeCreatorWindow(self, self.on_custom_theme_created)
@@ -573,6 +686,12 @@ class SettingsManager(ctk.CTkFrame):
     def import_theme_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("CustomTkinter Theme", "*.json")])
         if not file_path: return
+
+        is_valid, error_msg = self.validate_theme_file(file_path)
+        if not is_valid:
+            messagebox.showerror("Помилка", f"Некоректний файл теми:\n{error_msg}")
+            return
+
         try:
             shutil.copy(file_path, self.themes_dir)
             theme_name = os.path.basename(file_path).replace(".json", "")
@@ -583,6 +702,30 @@ class SettingsManager(ctk.CTkFrame):
             messagebox.showinfo("Успіх", f"Тему '{theme_name}' успішно імпортовано! Перезапустіть лаунчер.")
         except Exception as e:
             messagebox.showerror("Помилка", f"Не вдалося імпортувати тему: {e}")
+
+    def validate_theme_file(self, file_path):
+        """ Перевіряє, що обраний .json файл — валідний JSON-об'єкт
+        з ключами, очікуваними для теми CustomTkinter, перш ніж
+        копіювати його в themes_dir. Захищає від пошкодженого файлу,
+        який зламав би вибір кольорової теми при наступному запуску. """
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            return False, f"Файл не є коректним JSON ({e})"
+        except Exception as e:
+            return False, f"Не вдалося прочитати файл ({e})"
+
+        if not isinstance(data, dict) or not data:
+            return False, "Файл порожній або має невірну структуру (очікується JSON-об'єкт)"
+
+        # Тема CustomTkinter завжди описує стилі базових віджетів —
+        # якщо жодного з очікуваних ключів немає, це, ймовірно, не тема.
+        required_keys = {"CTk", "CTkButton", "CTkFrame", "CTkLabel"}
+        if not required_keys.intersection(data.keys()):
+            return False, "Файл не схожий на тему CustomTkinter (відсутні очікувані ключі стилів)"
+
+        return True, ""
 
     def change_theme(self, choice):
         ctk.set_appearance_mode(choice)
@@ -609,6 +752,12 @@ class SettingsManager(ctk.CTkFrame):
         self.save_settings()
 
     def update_close_protocol(self):
+        """ Реально перемикає обробник хрестика вікна між 'ховати в трей'
+        та 'повністю виходити', відповідно до стану чекбокса. """
+        if self.tray_checkbox.get() == 1:
+            self.app.protocol('WM_DELETE_WINDOW', self.app.withdraw_window)
+        else:
+            self.app.protocol('WM_DELETE_WINDOW', self.app.exit_program)
         self.save_settings()
 
     def save_settings(self):
@@ -661,3 +810,10 @@ class SettingsManager(ctk.CTkFrame):
             self.tray_checkbox.select()
             if self.is_windows_autostart_active():
                 self.autostart_checkbox.select()
+
+        # select()/deselect() вище НЕ викликають command, тому протокол
+        # закриття вікна потрібно застосувати вручну одразу після завантаження
+        if self.tray_checkbox.get() == 1:
+            self.app.protocol('WM_DELETE_WINDOW', self.app.withdraw_window)
+        else:
+            self.app.protocol('WM_DELETE_WINDOW', self.app.exit_program)

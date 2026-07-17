@@ -106,6 +106,18 @@ class PresetManager(ctk.CTkFrame):
             fill="x"
         )
 
+        self.autostart_checkbox = ctk.CTkCheckBox(
+            manage_frame,
+            text="🚀 Стартовий набір: запускати цей набір одразу при відкритті лаунчера",
+            command=self.toggle_preset_autostart
+        )
+        self.autostart_checkbox.pack(
+            pady=(0, 5),
+            padx=10,
+            fill="x",
+            anchor="w"
+        )
+
         # Панель дій
         actions_frame = ctk.CTkFrame(
             manage_frame,
@@ -207,8 +219,49 @@ class PresetManager(ctk.CTkFrame):
             self.preset_dropdown.configure(values=["Немає створених наборів"])
             self.preset_dropdown.set("Немає створених наборів")
 
+        self.refresh_autostart_checkbox_state()
+
     def on_preset_changed(self, choice):
-        pass
+        self.refresh_autostart_checkbox_state()
+
+    def refresh_autostart_checkbox_state(self):
+        """ Синхронізує стан чекбокса автозапуску з даними обраного пресету """
+        selected = self.preset_dropdown.get()
+
+        if not selected or selected == "Немає створених наборів" or selected not in self.presets:
+            self.autostart_checkbox.deselect()
+            self.autostart_checkbox.configure(state="disabled")
+            return
+
+        self.autostart_checkbox.configure(state="normal")
+
+        preset = self.presets.get(selected, {})
+        if preset.get("autostart", False):
+            self.autostart_checkbox.select()
+        else:
+            self.autostart_checkbox.deselect()
+
+    def toggle_preset_autostart(self):
+        """ Вмикає/вимикає автозапуск для обраного пресету.
+        Лаунчер (check_and_run_autostart) очікує лише ОДИН автозапускний
+        пресет, тому при увімкненні знімаємо прапорець з усіх інших. """
+        selected = self.preset_dropdown.get()
+
+        if not selected or selected == "Немає створених наборів" or selected not in self.presets:
+            self.autostart_checkbox.deselect()
+            return
+
+        enable = (self.autostart_checkbox.get() == 1)
+
+        if enable:
+            for name, data in self.presets.items():
+                if isinstance(data, dict):
+                    data["autostart"] = (name == selected)
+        else:
+            self.presets[selected]["autostart"] = False
+
+        with open(self.presets_file, "w", encoding="utf-8") as file:
+            json.dump(self.presets, file, indent=4, ensure_ascii=False)
 
     def launch_current_preset(self):
         selected = self.preset_dropdown.get()

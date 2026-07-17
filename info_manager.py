@@ -5,7 +5,18 @@ import webbrowser
 class InfoManager(ctk.CTkFrame):
     def __init__(self, master, **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
+        # Сюди складаємо всі текстові підписи, яким треба динамічно
+        # перераховувати ширину переносу тексту (wraplength) під розмір вікна
+        self._wrap_labels = []
         self.create_widgets()
+        # При будь-якій зміні розміру фрейму — перераховуємо перенос тексту
+        self.bind("<Configure>", self._on_resize)
+
+    def _on_resize(self, event):
+        # Ширина підпису = ширина вікна мінус відступи (приблизно 50px на padx з обох боків)
+        new_width = max(event.width - 50, 150)
+        for label in self._wrap_labels:
+            label.configure(wraplength=new_width)
 
     def create_widgets(self):
         # Головний заголовок вікна
@@ -27,6 +38,7 @@ class InfoManager(ctk.CTkFrame):
         )
         about_desc = ctk.CTkLabel(about_box, text=about_text, wraplength=420, justify="left", font=(None, 12))
         about_desc.pack(pady=(0, 12), padx=12, anchor="w")
+        self._wrap_labels.append(about_desc)
 
         # Скрол-панель для кроків інструкції
         scroll_frame = ctk.CTkScrollableFrame(self, label_text="📖 Покрокове керівництво")
@@ -100,6 +112,7 @@ class InfoManager(ctk.CTkFrame):
 
         d_lbl = ctk.CTkLabel(box, text=text, wraplength=380, justify="left", font=(None, 12))
         d_lbl.pack(pady=(0, 12), padx=12, anchor="w")
+        self._wrap_labels.append(d_lbl)
 
     def add_customization_step(self, master):
         """ Спеціальний крок для кастомізації з клікабельним лінком """
@@ -116,6 +129,7 @@ class InfoManager(ctk.CTkFrame):
         )
         d_lbl1 = ctk.CTkLabel(box, text=part1_text, wraplength=380, justify="left", font=(None, 12))
         d_lbl1.pack(pady=(0, 6), padx=12, anchor="w")
+        self._wrap_labels.append(d_lbl1)
 
         # КЛІКАБЕЛЬНЕ ПОСИЛАННЯ
         link_url = "https://github.com/a13xe/CTkThemesPack"
@@ -136,3 +150,4 @@ class InfoManager(ctk.CTkFrame):
         part2_text = "Завантажений .json файл теми просто імпортуйте через кнопку '📁 Імпортувати .json' у вкладці Налаштувань."
         d_lbl2 = ctk.CTkLabel(box, text=part2_text, wraplength=380, justify="left", font=(None, 12))
         d_lbl2.pack(pady=(0, 12), padx=12, anchor="w")
+        self._wrap_labels.append(d_lbl2)

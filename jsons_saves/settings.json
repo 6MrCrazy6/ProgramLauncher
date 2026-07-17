@@ -1,8 +1,8 @@
 {
     "theme": "Dark",
-    "color_theme": "dark-blue",
+    "color_theme": "yellow",
     "close_after_launch": false,
     "minimize_to_tray": true,
     "delay": 5,
-    "windows_autostart": true
+    "windows_autostart": false
 }

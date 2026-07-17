@@ -166,6 +166,11 @@ def exit_program():
     global tray_icon
     if tray_icon:
         tray_icon.stop()
+    # Коректно зупиняємо фоновий потік перевірки розкладу перед виходом
+    try:
+        schedule_manager_frame.stop_checking_loop()
+    except Exception:
+        pass
     app.quit()
     sys.exit(0)
 
