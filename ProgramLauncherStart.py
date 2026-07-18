@@ -20,6 +20,11 @@ from settings_manager import SettingsManager
 from info_manager import InfoManager
 from schedule_manager import ScheduleManager
 
+# saves_path/themes_path самі рахують шлях відносно .exe/скрипта
+# (а не поточної робочої директорії) і створюють потрібні папки —
+# завдяки цьому всю теку програми можна переносити на інший диск
+from app_paths import saves_path, themes_path
+
 # --- НАЛАШТУВАННЯ CTYPES ДЛЯ DRAG & DROP НА WINDOWS ---
 # Зберігаємо глобальне посилання на callback-функцію, щоб її не видалив GC (Garbage Collector)
 _global_wndproc_ref = None
@@ -100,17 +105,7 @@ def setup_windows_dnd(window, callback):
 
 # --- ФУНКЦІЯ СТАРТОВОГО ПІДВАНТАЖЕННЯ ТЕМИ ---
 def pre_apply_theme():
-    if getattr(sys, "frozen", False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-
-    settings_dir = os.path.join(base_dir, "jsons_saves")
-    themes_dir = os.path.join(base_dir, "themes")
-    settings_file = os.path.join(settings_dir, "settings.json")
-
-    os.makedirs(themes_dir, exist_ok=True)
-    os.makedirs(settings_dir, exist_ok=True)
+    settings_file = saves_path("settings.json")
 
     if os.path.exists(settings_file):
         try:
@@ -121,7 +116,7 @@ def pre_apply_theme():
             color_theme = st.get("color_theme", "blue")
 
             if color_theme not in ["blue", "green", "dark-blue"]:
-                theme_path = os.path.join(themes_dir, f"{color_theme}.json")
+                theme_path = themes_path(f"{color_theme}.json")
                 if os.path.exists(theme_path):
                     ctk.set_default_color_theme(theme_path)
                     return
@@ -265,15 +260,7 @@ setup_windows_dnd(app, on_files_dropped_native)
 
 
 def save_programs():
-    if getattr(sys, "frozen", False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-
-    settings_dir = os.path.join(base_dir, "jsons_saves")
-    os.makedirs(settings_dir, exist_ok=True)
-
-    programs_file = os.path.join(settings_dir, "checkbox_programs.json")
+    programs_file = saves_path("checkbox_programs.json")
 
     data = [{"name": p["name"], "path": p["path"]} for p in programs]
 
@@ -328,13 +315,7 @@ def delete_single_program(program_to_delete):
 def load_programs():
     global programs
 
-    if getattr(sys, "frozen", False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-
-    settings_dir = os.path.join(base_dir, "jsons_saves")
-    programs_file = os.path.join(settings_dir, "checkbox_programs.json")
+    programs_file = saves_path("checkbox_programs.json")
 
     try:
         with open(programs_file, "r", encoding="utf-8") as file:
@@ -354,14 +335,8 @@ def load_programs():
 
 
 def check_and_run_autostart():
-    if getattr(sys, "frozen", False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-
-    settings_dir = os.path.join(base_dir, "jsons_saves")
-    presets_file = os.path.join(settings_dir, "presets.json")
-    settings_file = os.path.join(settings_dir, "settings.json")
+    presets_file = saves_path("presets.json")
+    settings_file = saves_path("settings.json")
 
     if os.path.exists(presets_file) and os.path.getsize(presets_file) > 0:
         try:
@@ -410,12 +385,7 @@ def add_program():
 
 
 def launch_selected():
-    if getattr(sys, "frozen", False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-
-    settings_file = os.path.join(base_dir, "jsons_saves", "settings.json")
+    settings_file = saves_path("settings.json")
 
     delay = 0
     close_after = False

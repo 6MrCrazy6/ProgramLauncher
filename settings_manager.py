@@ -8,6 +8,7 @@ import zipfile  # Модуль для роботи з резервними ко�
 import tempfile  # Для безпечної перевірки бекапу перед його застосуванням
 import winreg  # Модуль для роботи з автозапуском Windows
 import subprocess
+from app_paths import get_base_dir, themes_path, saves_path
 
 
 class ThemeCreatorWindow(ctk.CTkToplevel):
@@ -278,11 +279,7 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
         }
 
         try:
-            base_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(
-                os.path.abspath(__file__))
-            themes_dir = os.path.join(base_dir, "themes")
-            os.makedirs(themes_dir, exist_ok=True)
-            with open(os.path.join(themes_dir, f"{name}.json"), "w", encoding="utf-8") as f:
+            with open(themes_path(f"{name}.json"), "w", encoding="utf-8") as f:
                 json.dump(theme_structure, f, indent=4)
             self.on_save_callback(name)
             self.destroy()
@@ -296,15 +293,13 @@ class SettingsManager(ctk.CTkFrame):
         self.app = master
         self.restart_callback_func = restart_callback
 
-        # Базовая папка программы
-        if getattr(sys, "frozen", False):
-            self.base_dir = os.path.dirname(sys.executable)
-        else:
-            self.base_dir = os.path.dirname(os.path.abspath(__file__))
-
+        # Базова папка програми — завжди поруч з .exe/скриптом (app_paths.py),
+        # незалежно від поточної робочої директорії. Це дозволяє вільно
+        # переносити всю теку програми на інший диск без поламок.
+        self.base_dir = get_base_dir()
         self.settings_dir = os.path.join(self.base_dir, "jsons_saves")
         self.themes_dir = os.path.join(self.base_dir, "themes")
-        self.settings_file = os.path.join(self.settings_dir, "settings.json")
+        self.settings_file = saves_path("settings.json")
 
         os.makedirs(self.themes_dir, exist_ok=True)
         os.makedirs(self.settings_dir, exist_ok=True)

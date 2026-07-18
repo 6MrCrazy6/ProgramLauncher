@@ -1,21 +1,10 @@
 import customtkinter as ctk
 import os
-import sys
 import json
 import time
 import threading
 from datetime import datetime
-
-
-def get_base_dir():
-    """ Повертає теку, де реально лежить .exe (при білді) або .py скрипт.
-    Це важливо для портативного білда без інсталятора: exe можуть запустити
-    не з його "рідної" робочої директорії (наприклад, через ярлик автозавантаження
-    з іншим "Start in"), тож шляхи до jsons_saves треба рахувати від sys.executable,
-    а не покладатися на відносний шлях. """
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+from app_paths import saves_path
 
 
 class ScheduleManager(ctk.CTkFrame):
@@ -23,8 +12,10 @@ class ScheduleManager(ctk.CTkFrame):
         super().__init__(parent, fg_color="transparent")
         self.exit_program_callback = exit_program_callback
 
-        self.base_dir = get_base_dir()
-        self.db_path = os.path.join(self.base_dir, "jsons_saves", "schedule.json")
+        # saves_path (app_paths.py) сама рахує шлях від .exe/скрипта
+        # і створює jsons_saves/, незалежно від cwd — тому весь
+        # застосунок можна переносити на інший диск без наслідків
+        self.db_path = saves_path("schedule.json")
 
         # Лок для безпечного читання/запису json одночасно з головного потоку (UI)
         # та фонового потоку перевірки розкладу
@@ -41,8 +32,6 @@ class ScheduleManager(ctk.CTkFrame):
             "П'ятниця": 4, "Субота": 5, "Неділя": 6
         }
         self.days_list = list(self.days_map.keys())
-
-        os.makedirs(os.path.join(self.base_dir, "jsons_saves"), exist_ok=True)
 
         # --- UI ЕЛЕМЕНТИ ---
         title = ctk.CTkLabel(self, text="⏰ Налаштування розкладу та днів", font=ctk.CTkFont(size=16, weight="bold"))
@@ -111,7 +100,7 @@ class ScheduleManager(ctk.CTkFrame):
     def update_data_lists(self, current_programs):
         self.available_programs = current_programs
         self.available_presets = []
-        presets_file = os.path.join(self.base_dir, "jsons_saves", "presets.json")
+        presets_file = saves_path("presets.json")
         if os.path.exists(presets_file):
             try:
                 with open(presets_file, "r", encoding="utf-8") as f:
@@ -293,7 +282,7 @@ class ScheduleManager(ctk.CTkFrame):
                     t["triggered_today"] = False
                     updated = True
 
-        settings_file = os.path.join(self.base_dir, "jsons_saves", "settings.json")
+        settings_file = saves_path("settings.json")
         delay = 0
         close_after = False
         if os.path.exists(settings_file):
@@ -330,7 +319,7 @@ class ScheduleManager(ctk.CTkFrame):
 
                 # Запуск пресету
                 elif t.get("type") == "preset":
-                    presets_file = os.path.join(self.base_dir, "jsons_saves", "presets.json")
+                    presets_file = saves_path("presets.json")
                     if os.path.exists(presets_file):
                         try:
                             with open(presets_file, "r", encoding="utf-8") as pf:

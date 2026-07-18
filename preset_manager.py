@@ -3,17 +3,19 @@ from tkinter import messagebox
 import os
 import json
 import subprocess  # Модуль для надсилання нативних системних команд закриття процесів
+from app_paths import saves_path
 
 
 class PresetManager(ctk.CTkFrame):
     def __init__(self, master, **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
-        self.presets_file = "jsons_saves/presets.json"
+        # saves_path сама створює jsons_saves/ поруч із .exe/скриптом,
+        # незалежно від поточної робочої директорії
+        self.presets_file = saves_path("presets.json")
         self.all_programs = []
         self.presets = {}
         self.checkboxes = {}
 
-        os.makedirs("jsons_saves", exist_ok=True)
         self.load_presets()
         self.create_widgets()
 
