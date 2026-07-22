@@ -3,19 +3,18 @@ from tkinter import messagebox
 import os
 import json
 import subprocess  # Модуль для надсилання нативних системних команд закриття процесів
-from app_paths import saves_path
+from process_utils import smart_startfile, resolve_program_entry
 
 
 class PresetManager(ctk.CTkFrame):
     def __init__(self, master, **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
-        # saves_path сама створює jsons_saves/ поруч із .exe/скриптом,
-        # незалежно від поточної робочої директорії
-        self.presets_file = saves_path("presets.json")
+        self.presets_file = "jsons_saves/presets.json"
         self.all_programs = []
         self.presets = {}
         self.checkboxes = {}
 
+        os.makedirs("jsons_saves", exist_ok=True)
         self.load_presets()
         self.create_widgets()
 
@@ -181,7 +180,9 @@ class PresetManager(ctk.CTkFrame):
         for prog in self.all_programs:
             cb = ctk.CTkCheckBox(self.scroll_programs, text=prog["name"])
             cb.pack(pady=2, anchor="w", padx=10)
-            self.checkboxes[prog["name"]] = (cb, prog["path"])
+            # Зберігаємо і аргументи запуску (якщо задані на головному екрані),
+            # щоб вони перенеслись і в набір
+            self.checkboxes[prog["name"]] = (cb, prog["path"], prog.get("args", ""))
 
     def save_new_preset(self):
         name = self.preset_name_entry.get().strip()
@@ -189,22 +190,24 @@ class PresetManager(ctk.CTkFrame):
             messagebox.showwarning("Помилка", "Введіть коректну назву для набору!")
             return
 
-        selected_paths = []
-        for cb_name, (cb_widget, cb_path) in self.checkboxes.items():
+        selected_entries = []
+        for cb_name, (cb_widget, cb_path, cb_args) in self.checkboxes.items():
             if cb_widget.get() == 1:
-                selected_paths.append(cb_path)
+                # Зберігаємо як {"path", "args"}, щоб аргументи запуску
+                # (задані на головному екрані) працювали і всередині набору
+                selected_entries.append({"path": cb_path, "args": cb_args})
 
-        if not selected_paths:
+        if not selected_entries:
             messagebox.showwarning("Помилка", "Оберіть хоча б одну програму для набору!")
             return
 
-        self.presets[name] = {"programs": selected_paths}
+        self.presets[name] = {"programs": selected_entries}
 
         with open(self.presets_file, "w", encoding="utf-8") as file:
             json.dump(self.presets, file, indent=4, ensure_ascii=False)
 
         self.preset_name_entry.delete(0, "end")
-        for cb_widget, _ in self.checkboxes.values():
+        for cb_widget, _, _ in self.checkboxes.values():
             cb_widget.deselect()
 
         self.update_dropdown()
@@ -265,18 +268,29 @@ class PresetManager(ctk.CTkFrame):
         with open(self.presets_file, "w", encoding="utf-8") as file:
             json.dump(self.presets, file, indent=4, ensure_ascii=False)
 
+    def _is_smart_launch_enabled(self):
+        """ Читає прапорець "Розумний запуск" з jsons_saves/settings.json.
+        За замовчуванням (якщо файл ще не створено) — вимкнено. """
+        settings_file = "jsons_saves/settings.json"
+        if os.path.exists(settings_file):
+            try:
+                with open(settings_file, "r", encoding="utf-8") as f:
+                    return json.load(f).get("smart_launch", False)
+            except Exception:
+                pass
+        return False
+
     def launch_current_preset(self):
         selected = self.preset_dropdown.get()
         if selected == "Немає створених наборів": return
 
         preset = self.presets.get(selected)
         if preset and "programs" in preset:
-            for path in preset["programs"]:
+            smart_launch = self._is_smart_launch_enabled()
+            for prog_item in preset["programs"]:
+                path, args = resolve_program_entry(prog_item)
                 if os.path.exists(path):
-                    try:
-                        os.startfile(path)
-                    except:
-                        pass
+                    smart_startfile(path, args=args, skip_if_running=smart_launch)
 
     def close_current_preset(self):
         """ Примусове завершення процесів усіх програм поточного пресету """
@@ -286,7 +300,8 @@ class PresetManager(ctk.CTkFrame):
         preset = self.presets.get(selected)
         if not preset or "programs" not in preset: return
 
-        for path in preset["programs"]:
+        for prog_item in preset["programs"]:
+            path, _args = resolve_program_entry(prog_item)
             exe_name = os.path.basename(path)
             if exe_name.lower().endswith(".exe"):
                 try:

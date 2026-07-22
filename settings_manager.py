@@ -8,7 +8,6 @@ import zipfile  # Модуль для роботи з резервними ко�
 import tempfile  # Для безпечної перевірки бекапу перед його застосуванням
 import winreg  # Модуль для роботи з автозапуском Windows
 import subprocess
-from app_paths import get_base_dir, themes_path, saves_path
 
 
 class ThemeCreatorWindow(ctk.CTkToplevel):
@@ -279,7 +278,11 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
         }
 
         try:
-            with open(themes_path(f"{name}.json"), "w", encoding="utf-8") as f:
+            base_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(
+                os.path.abspath(__file__))
+            themes_dir = os.path.join(base_dir, "themes")
+            os.makedirs(themes_dir, exist_ok=True)
+            with open(os.path.join(themes_dir, f"{name}.json"), "w", encoding="utf-8") as f:
                 json.dump(theme_structure, f, indent=4)
             self.on_save_callback(name)
             self.destroy()
@@ -293,13 +296,15 @@ class SettingsManager(ctk.CTkFrame):
         self.app = master
         self.restart_callback_func = restart_callback
 
-        # Базова папка програми — завжди поруч з .exe/скриптом (app_paths.py),
-        # незалежно від поточної робочої директорії. Це дозволяє вільно
-        # переносити всю теку програми на інший диск без поламок.
-        self.base_dir = get_base_dir()
+        # Базовая папка программы
+        if getattr(sys, "frozen", False):
+            self.base_dir = os.path.dirname(sys.executable)
+        else:
+            self.base_dir = os.path.dirname(os.path.abspath(__file__))
+
         self.settings_dir = os.path.join(self.base_dir, "jsons_saves")
         self.themes_dir = os.path.join(self.base_dir, "themes")
-        self.settings_file = saves_path("settings.json")
+        self.settings_file = os.path.join(self.settings_dir, "settings.json")
 
         os.makedirs(self.themes_dir, exist_ok=True)
         os.makedirs(self.settings_dir, exist_ok=True)
@@ -459,6 +464,22 @@ class SettingsManager(ctk.CTkFrame):
             command=self.toggle_windows_autostart
         )
         self.autostart_checkbox.pack(pady=4, padx=10, fill="x", anchor="w")
+
+        self.smart_launch_checkbox = ctk.CTkCheckBox(
+            self.behavior_box,
+            text="🧠 Розумний запуск: не відкривати повторно, якщо вже запущено",
+            command=self.save_settings
+        )
+        self.smart_launch_checkbox.pack(pady=(4, 0), padx=10, fill="x", anchor="w")
+
+        smart_launch_hint = ctk.CTkLabel(
+            self.behavior_box,
+            text="Перед запуском лаунчер перевірить список запущених процесів\n"
+                 "(через psutil) і пропустить програму, якщо вона вже відкрита —\n"
+                 "щоб не плодити зайві вікна при повторних кліках чи спрацюванні розкладу.",
+            font=(None, 10), text_color="gray", justify="left", anchor="w"
+        )
+        smart_launch_hint.pack(pady=(0, 6), padx=28, fill="x", anchor="w")
 
         # 4. Затримка
         self.delay_box = ctk.CTkFrame(self.scroll_container)
@@ -762,7 +783,8 @@ class SettingsManager(ctk.CTkFrame):
             "close_after_launch": self.close_checkbox.get() == 1,
             "minimize_to_tray": self.tray_checkbox.get() == 1,
             "delay": int(self.delay_slider.get()),
-            "windows_autostart": self.autostart_checkbox.get() == 1
+            "windows_autostart": self.autostart_checkbox.get() == 1,
+            "smart_launch": self.smart_launch_checkbox.get() == 1
         }
         try:
             with open(self.settings_file, "w", encoding="utf-8") as f:
@@ -793,6 +815,11 @@ class SettingsManager(ctk.CTkFrame):
                     self.autostart_checkbox.select()
                 else:
                     self.autostart_checkbox.deselect()
+
+                if st.get("smart_launch", False):
+                    self.smart_launch_checkbox.select()
+                else:
+                    self.smart_launch_checkbox.deselect()
 
                 delay_val = st.get("delay", 0)
                 self.delay_slider.set(delay_val)

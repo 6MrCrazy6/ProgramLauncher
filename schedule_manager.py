@@ -1,10 +1,22 @@
 import customtkinter as ctk
 import os
+import sys
 import json
 import time
 import threading
 from datetime import datetime
-from app_paths import saves_path
+from process_utils import smart_startfile, resolve_program_entry
+
+
+def get_base_dir():
+    """ Повертає теку, де реально лежить .exe (при білді) або .py скрипт.
+    Це важливо для портативного білда без інсталятора: exe можуть запустити
+    не з його "рідної" робочої директорії (наприклад, через ярлик автозавантаження
+    з іншим "Start in"), тож шляхи до jsons_saves треба рахувати від sys.executable,
+    а не покладатися на відносний шлях. """
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
 
 class ScheduleManager(ctk.CTkFrame):
@@ -12,10 +24,8 @@ class ScheduleManager(ctk.CTkFrame):
         super().__init__(parent, fg_color="transparent")
         self.exit_program_callback = exit_program_callback
 
-        # saves_path (app_paths.py) сама рахує шлях від .exe/скрипта
-        # і створює jsons_saves/, незалежно від cwd — тому весь
-        # застосунок можна переносити на інший диск без наслідків
-        self.db_path = saves_path("schedule.json")
+        self.base_dir = get_base_dir()
+        self.db_path = os.path.join(self.base_dir, "jsons_saves", "schedule.json")
 
         # Лок для безпечного читання/запису json одночасно з головного потоку (UI)
         # та фонового потоку перевірки розкладу
@@ -32,6 +42,8 @@ class ScheduleManager(ctk.CTkFrame):
             "П'ятниця": 4, "Субота": 5, "Неділя": 6
         }
         self.days_list = list(self.days_map.keys())
+
+        os.makedirs(os.path.join(self.base_dir, "jsons_saves"), exist_ok=True)
 
         # --- UI ЕЛЕМЕНТИ ---
         title = ctk.CTkLabel(self, text="⏰ Налаштування розкладу та днів", font=ctk.CTkFont(size=16, weight="bold"))
@@ -100,7 +112,7 @@ class ScheduleManager(ctk.CTkFrame):
     def update_data_lists(self, current_programs):
         self.available_programs = current_programs
         self.available_presets = []
-        presets_file = saves_path("presets.json")
+        presets_file = os.path.join(self.base_dir, "jsons_saves", "presets.json")
         if os.path.exists(presets_file):
             try:
                 with open(presets_file, "r", encoding="utf-8") as f:
@@ -153,11 +165,14 @@ class ScheduleManager(ctk.CTkFrame):
 
         if current_type == "Програма":
             prog_path = ""
+            prog_args = ""
             for p in self.available_programs:
                 if p["name"] == selected_item:
                     prog_path = p["path"]
+                    prog_args = p.get("args", "")
                     break
             task_entry["path"] = prog_path
+            task_entry["args"] = prog_args
 
         tasks.append(task_entry)
         self.write_json(tasks)
@@ -282,15 +297,17 @@ class ScheduleManager(ctk.CTkFrame):
                     t["triggered_today"] = False
                     updated = True
 
-        settings_file = saves_path("settings.json")
+        settings_file = os.path.join(self.base_dir, "jsons_saves", "settings.json")
         delay = 0
         close_after = False
+        smart_launch = False
         if os.path.exists(settings_file):
             try:
                 with open(settings_file, "r", encoding="utf-8") as sf:
                     st = json.load(sf)
                     delay = st.get("delay", 0)
                     close_after = st.get("close_after_launch", False)
+                    smart_launch = st.get("smart_launch", False)
             except:
                 pass
 
@@ -309,17 +326,15 @@ class ScheduleManager(ctk.CTkFrame):
                 # Запуск поодинокої програми
                 if t.get("type", "single") == "single":
                     if os.path.exists(t.get("path", "")):
-                        try:
-                            os.startfile(t["path"])
+                        status = smart_startfile(t["path"], args=t.get("args", ""), skip_if_running=smart_launch)
+                        if status in ("launched", "skipped_running"):
                             t["triggered_today"] = True
                             updated = True
                             launched_something = True
-                        except:
-                            pass
 
                 # Запуск пресету
                 elif t.get("type") == "preset":
-                    presets_file = saves_path("presets.json")
+                    presets_file = os.path.join(self.base_dir, "jsons_saves", "presets.json")
                     if os.path.exists(presets_file):
                         try:
                             with open(presets_file, "r", encoding="utf-8") as pf:
@@ -327,14 +342,15 @@ class ScheduleManager(ctk.CTkFrame):
                                 target_preset = all_presets.get(t["name"])
 
                                 if target_preset and "programs" in target_preset:
-                                    for idx, p_path in enumerate(target_preset["programs"]):
-                                        if idx > 0 and delay > 0:
+                                    did_fresh_launch = False
+                                    for prog_item in target_preset["programs"]:
+                                        p_path, p_args = resolve_program_entry(prog_item)
+                                        if did_fresh_launch and delay > 0:
                                             # Безпечно: ми в фоновому потоці, GUI не завмирає
                                             time.sleep(delay)
-                                        try:
-                                            os.startfile(p_path)
-                                        except:
-                                            pass
+                                        status = smart_startfile(p_path, args=p_args, skip_if_running=smart_launch)
+                                        if status == "launched":
+                                            did_fresh_launch = True
 
                                     t["triggered_today"] = True
                                     updated = True
