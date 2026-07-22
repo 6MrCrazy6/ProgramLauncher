@@ -109,6 +109,19 @@ class ScheduleManager(ctk.CTkFrame):
         self.load_and_refresh_ui()
         self.start_checking_loop()
 
+    def _make_responsive(self, container, label, label_padx=10):
+        """ Прив'язує wraplength підпису до реальної ширини контейнера,
+        щоб довгі назви програм/пресетів переносились, а не обрізались
+        чи вилазили за межі рядка на вузьких вікнах. """
+
+        def _on_container_resize(event):
+            scaling = ctk.ScalingTracker.get_widget_scaling(label) or 1
+            usable = event.width - (label_padx * 2)
+            new_width = max(int(usable / scaling), 120)
+            label.configure(wraplength=new_width)
+
+        container.bind("<Configure>", _on_container_resize)
+
     def update_data_lists(self, current_programs):
         self.available_programs = current_programs
         self.available_presets = []
@@ -198,8 +211,12 @@ class ScheduleManager(ctk.CTkFrame):
             # Красиво виводимо дні, наприклад: Пн-Пт ⏰ 09:00
             days_str = f"{task.get('start_day', 'Пн')[:2]}-{task.get('end_day', 'Пт')[:2]}"
 
-            lbl = ctk.CTkLabel(row, text=f"🗓 {days_str}  ⏰ {task['time']}  [{icon}] {task['name']}", anchor="w")
+            lbl = ctk.CTkLabel(
+                row, text=f"🗓 {days_str}  ⏰ {task['time']}  [{icon}] {task['name']}",
+                anchor="w", justify="left"
+            )
             lbl.pack(side="left", fill="x", expand=True, padx=5)
+            self._make_responsive(row, lbl, label_padx=45)
 
             # Кнопка видалення тепер адаптивна (без жорстких кольорів, використовує border_width)
             btn_del = ctk.CTkButton(

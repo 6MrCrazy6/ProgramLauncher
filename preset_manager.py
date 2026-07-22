@@ -7,12 +7,21 @@ from process_utils import smart_startfile, resolve_program_entry
 
 
 class PresetManager(ctk.CTkFrame):
+    # Ті ж самі значення, що і на головному екрані ("Програми"), щоб
+    # категорії та їх позначення виглядали й поводились однаково
+    CATEGORY_ALL = "Всі"
+    CATEGORY_UNSET = "Без категорії"
+
     def __init__(self, master, **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
         self.presets_file = "jsons_saves/presets.json"
         self.all_programs = []
         self.presets = {}
         self.checkboxes = {}
+        # Запам'ятовує позначені (галочка) програми за їх назвою — незалежно
+        # від того, чи показані вони зараз під поточним фільтром категорій.
+        # Без цього перемикання фільтра "губило" б уже зроблений вибір.
+        self.program_selection = {}
 
         os.makedirs("jsons_saves", exist_ok=True)
         self.load_presets()
@@ -57,6 +66,22 @@ class PresetManager(ctk.CTkFrame):
             padx=10,
             fill="x"
         )
+
+        # -------------------------------
+        # Фільтр за категорією (той самий принцип, що і на вкладці "Програми")
+        # -------------------------------
+        category_filter_frame = ctk.CTkFrame(create_frame, fg_color="transparent")
+        category_filter_frame.pack(pady=(0, 5), padx=10, fill="x")
+
+        ctk.CTkLabel(category_filter_frame, text="🏷 Категорія:").pack(side="left", padx=(0, 8))
+
+        self.category_filter_dropdown = ctk.CTkOptionMenu(
+            category_filter_frame,
+            values=[self.CATEGORY_ALL],
+            command=lambda choice: self._render_program_checkboxes()
+        )
+        self.category_filter_dropdown.pack(side="left", fill="x", expand=True)
+        self.category_filter_dropdown.set(self.CATEGORY_ALL)
 
         # Скролл только для списка программ
         self.scroll_programs = ctk.CTkScrollableFrame(
@@ -171,15 +196,77 @@ class PresetManager(ctk.CTkFrame):
 
     def load_data_from_json(self, programs_list):
         """ Метод оновлює список чекбоксів на основі софту з головного екрана """
+        # Перед оновленням списку зберігаємо поточний вибір (галочки),
+        # інакше він загубиться разом зі старими віджетами
+        self._sync_selection_state()
+
         self.all_programs = programs_list
+        self._update_category_filter_values()
+        self._render_program_checkboxes()
+
+    def _get_program_category(self, prog):
+        """ Нормалізує категорію програми: порожнє значення -> CATEGORY_UNSET
+        (та сама логіка, що і на головному екрані). """
+        cat = (prog.get("category") or "").strip()
+        return cat if cat else self.CATEGORY_UNSET
+
+    def _get_all_categories(self):
+        """ Список усіх категорій, що реально використовуються серед програм. """
+        return sorted({self._get_program_category(p) for p in self.all_programs})
+
+    def _update_category_filter_values(self):
+        """ Оновлює список значень фільтра відповідно до поточних категорій.
+        Якщо обрана категорія зникла — скидає фільтр на "Всі". """
+        values = [self.CATEGORY_ALL] + self._get_all_categories()
+        current = self.category_filter_dropdown.get()
+        self.category_filter_dropdown.configure(values=values)
+        if current not in values:
+            self.category_filter_dropdown.set(self.CATEGORY_ALL)
+
+    def _sync_selection_state(self):
+        """ Запам'ятовує, які програми зараз позначені галочкою, ПЕРЕД тим
+        як їхні чекбокси будуть знищені (зміна фільтра категорій, оновлення
+        списку з головного екрана тощо) — щоб вибір користувача не губився. """
+        for name, (cb_widget, _path, _args) in self.checkboxes.items():
+            self.program_selection[name] = (cb_widget.get() == 1)
+
+    def _render_program_checkboxes(self):
+        """ Перемальовує список чекбоксів програм відповідно до обраної
+        категорії у фільтрі, зберігаючи раніше зроблений вибір (навіть для
+        програм, які зараз приховані іншою категорією). """
+        self._sync_selection_state()
 
         for widget in self.scroll_programs.winfo_children():
             widget.destroy()
-
         self.checkboxes = {}
-        for prog in self.all_programs:
-            cb = ctk.CTkCheckBox(self.scroll_programs, text=prog["name"])
+
+        selected_category = self.category_filter_dropdown.get()
+        if selected_category == self.CATEGORY_ALL:
+            visible_programs = self.all_programs
+        else:
+            visible_programs = [
+                p for p in self.all_programs
+                if self._get_program_category(p) == selected_category
+            ]
+
+        if not visible_programs:
+            text = (
+                "Немає жодної доданої програми на вкладці 'Програми'."
+                if not self.all_programs
+                else f"У категорії «{selected_category}» ще немає програм."
+            )
+            ctk.CTkLabel(self.scroll_programs, text=text, text_color="gray").pack(pady=15, padx=5)
+            return
+
+        for prog in visible_programs:
+            cat = (prog.get("category") or "").strip()
+            display_name = f"[{cat}] {prog['name']}" if cat else prog["name"]
+
+            cb = ctk.CTkCheckBox(self.scroll_programs, text=display_name)
             cb.pack(pady=2, anchor="w", padx=10)
+            if self.program_selection.get(prog["name"]):
+                cb.select()
+
             # Зберігаємо і аргументи запуску (якщо задані на головному екрані),
             # щоб вони перенеслись і в набір
             self.checkboxes[prog["name"]] = (cb, prog["path"], prog.get("args", ""))
@@ -190,12 +277,16 @@ class PresetManager(ctk.CTkFrame):
             messagebox.showwarning("Помилка", "Введіть коректну назву для набору!")
             return
 
+        # Враховуємо вибір і серед програм, прихованих поточним фільтром
+        # категорій, а не лише серед тих, що зараз відображені на екрані
+        self._sync_selection_state()
+
         selected_entries = []
-        for cb_name, (cb_widget, cb_path, cb_args) in self.checkboxes.items():
-            if cb_widget.get() == 1:
+        for prog in self.all_programs:
+            if self.program_selection.get(prog["name"]):
                 # Зберігаємо як {"path", "args"}, щоб аргументи запуску
                 # (задані на головному екрані) працювали і всередині набору
-                selected_entries.append({"path": cb_path, "args": cb_args})
+                selected_entries.append({"path": prog["path"], "args": prog.get("args", "")})
 
         if not selected_entries:
             messagebox.showwarning("Помилка", "Оберіть хоча б одну програму для набору!")
@@ -207,8 +298,8 @@ class PresetManager(ctk.CTkFrame):
             json.dump(self.presets, file, indent=4, ensure_ascii=False)
 
         self.preset_name_entry.delete(0, "end")
-        for cb_widget, _, _ in self.checkboxes.values():
-            cb_widget.deselect()
+        self.program_selection = {}
+        self._render_program_checkboxes()
 
         self.update_dropdown()
         self.preset_dropdown.set(name)

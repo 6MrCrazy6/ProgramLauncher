@@ -37,11 +37,17 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
         self.update_preview()
 
     def create_widgets(self):
-        ctk.CTkLabel(self, text="Назва теми (англійською):").pack(pady=(10, 2), padx=20, anchor="w")
-        self.name_entry = ctk.CTkEntry(self, placeholder_text="напр: mega_style")
+        # Усе всередині — прокручуваний контейнер, а не напряму self (Toplevel).
+        # Це гарантує, що при зменшенні вікна до minsize (400x500) вміст
+        # ніколи не обрізається "мовчки" — просто з'являється вертикальний скрол.
+        self.scroll_container = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self.scroll_container.pack(fill="both", expand=True)
+
+        ctk.CTkLabel(self.scroll_container, text="Назва теми (англійською):").pack(pady=(10, 2), padx=20, anchor="w")
+        self.name_entry = ctk.CTkEntry(self.scroll_container, placeholder_text="напр: mega_style")
         self.name_entry.pack(pady=5, padx=20, fill="x")
 
-        self.preview_window = ctk.CTkFrame(self, border_width=1)
+        self.preview_window = ctk.CTkFrame(self.scroll_container, border_width=1)
         self.preview_window.pack(pady=10, padx=20, fill="x")
         ctk.CTkLabel(self.preview_window, text="Попередній перегляд:").pack(pady=2)
 
@@ -69,13 +75,13 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
         self.btn_preview = ctk.CTkButton(self.preview_frame, text="Приклад кнопки")
         self.btn_preview.pack(pady=6, padx=10)
 
-        mode_frame = ctk.CTkFrame(self)
+        mode_frame = ctk.CTkFrame(self.scroll_container)
         mode_frame.pack(pady=5, padx=20, fill="x")
         self.mode_selector = ctk.CTkSegmentedButton(mode_frame, values=["До обох", "Тільки Dark", "Тільки Light"])
         self.mode_selector.set("До обох")
         self.mode_selector.pack(pady=5, padx=10, fill="x")
 
-        font_frame = ctk.CTkFrame(self)
+        font_frame = ctk.CTkFrame(self.scroll_container)
         font_frame.pack(pady=5, padx=20, fill="x")
         available_fonts = ["Roboto", "Segoe UI", "Arial", "Consolas", "Verdana"]
         self.font_dropdown = ctk.CTkOptionMenu(font_frame, values=available_fonts, command=self.update_preview)
@@ -87,7 +93,7 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
         self.font_size_slider.set(13)
         self.font_size_slider.pack(side="right", fill="x", expand=True, pady=5, padx=5)
 
-        target_frame = ctk.CTkFrame(self)
+        target_frame = ctk.CTkFrame(self.scroll_container)
         target_frame.pack(pady=5, padx=20, fill="x")
         ctk.CTkLabel(target_frame, text="Оберіть елемент для редагування:").pack(pady=2, padx=10, anchor="w")
 
@@ -96,7 +102,7 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
         self.target_selector.set("Кнопки")
         self.target_selector.pack(pady=5, padx=10, fill="x")
 
-        self.sliders_frame = ctk.CTkFrame(self)
+        self.sliders_frame = ctk.CTkFrame(self.scroll_container)
         self.sliders_frame.pack(pady=5, padx=20, fill="x")
 
         self.slider_title = ctk.CTkLabel(self.sliders_frame, text="Основний колір (RGB):", font=(None, 11, "bold"))
@@ -121,7 +127,7 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
                                        command=self.update_colors_from_sliders)
 
         self.on_target_changed("Кнопки")
-        btn_save = ctk.CTkButton(self, text="💾 Зберегти тему та застосувати", fg_color="green", hover_color="darkgreen",
+        btn_save = ctk.CTkButton(self.scroll_container, text="💾 Зберегти тему та застосувати", fg_color="green", hover_color="darkgreen",
                                  command=self.save_theme)
         btn_save.pack(pady=15, padx=20, fill="x")
 
@@ -391,6 +397,19 @@ class SettingsManager(ctk.CTkFrame):
             with open(base_theme_path, "w", encoding="utf-8") as f:
                 json.dump(base_structure, f, indent=4)
 
+    def _make_responsive(self, container, label, label_padx=12):
+        """ Прив'язує wraplength підпису до реальної ширини його контейнера,
+        а не до одного жорсткого числа. Компенсує widget_scaling (DPI-масштаб
+        Windows), яке CTkLabel.configure(wraplength=...) сам домножує. """
+
+        def _on_container_resize(event):
+            scaling = ctk.ScalingTracker.get_widget_scaling(label) or 1
+            usable = event.width - (label_padx * 2)
+            new_width = max(int(usable / scaling), 150)
+            label.configure(wraplength=new_width)
+
+        container.bind("<Configure>", _on_container_resize)
+
     def get_available_themes(self):
         themes = ["blue", "green", "dark-blue"]
         if os.path.exists(self.themes_dir):
@@ -457,6 +476,7 @@ class SettingsManager(ctk.CTkFrame):
             font=(None, 10), text_color="gray", justify="left", anchor="w"
         )
         tray_hint.pack(pady=(0, 6), padx=28, fill="x", anchor="w")
+        self._make_responsive(self.behavior_box, tray_hint, label_padx=28)
 
         self.autostart_checkbox = ctk.CTkCheckBox(
             self.behavior_box,
@@ -480,6 +500,7 @@ class SettingsManager(ctk.CTkFrame):
             font=(None, 10), text_color="gray", justify="left", anchor="w"
         )
         smart_launch_hint.pack(pady=(0, 6), padx=28, fill="x", anchor="w")
+        self._make_responsive(self.behavior_box, smart_launch_hint, label_padx=28)
 
         # 4. Затримка
         self.delay_box = ctk.CTkFrame(self.scroll_container)
