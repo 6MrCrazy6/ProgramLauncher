@@ -224,3 +224,4 @@ __marimo__/
 # чужі особисті пресети та шляхи до .exe будуть перезаписувати ваші.
 jsons_saves/
 themes/
+version_info.txt
