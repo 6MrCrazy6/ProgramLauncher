@@ -1100,24 +1100,56 @@ class SettingsManager(ctk.CTkFrame):
 
     # --- ВСІ ТВОЇ ОРИГІНАЛЬНІ ФУНКЦІЇ БЕЗ ЗМІН ---
     def import_theme_file(self):
-        file_path = filedialog.askopenfilename(filetypes=[("CustomTkinter Theme", "*.json")])
-        if not file_path: return
-
-        is_valid, error_msg = self.validate_theme_file(file_path)
-        if not is_valid:
-            messagebox.showerror("Помилка", f"Некоректний файл теми:\n{error_msg}")
+        file_paths = filedialog.askopenfilenames(filetypes=[("CustomTkinter Theme", "*.json")])
+        if not file_paths:
             return
 
-        try:
-            shutil.copy(file_path, self.themes_dir)
+        imported = []
+        errors = []
+
+        for file_path in file_paths:
             theme_name = os.path.basename(file_path).replace(".json", "")
+
+            is_valid, error_msg = self.validate_theme_file(file_path)
+            if not is_valid:
+                errors.append(f"{theme_name}: {error_msg}")
+                continue
+
+            try:
+                shutil.copy(file_path, self.themes_dir)
+                imported.append(theme_name)
+            except Exception as e:
+                errors.append(f"{theme_name}: {e}")
+
+        if imported:
             all_themes = self.get_available_themes()
             self.color_dropdown.configure(values=all_themes)
-            self.color_dropdown.set(theme_name)
-            self.change_color_theme(theme_name)
-            messagebox.showinfo("Успіх", f"Тему '{theme_name}' успішно імпортовано! Перезапустіть лаунчер.")
-        except Exception as e:
-            messagebox.showerror("Помилка", f"Не вдалося імпортувати тему: {e}")
+            # Застосовуємо останню з успішно імпортованих тем
+            last_theme = imported[-1]
+            self.color_dropdown.set(last_theme)
+            self.change_color_theme(last_theme)
+
+        # Підсумкове повідомлення: окремо успіхи, окремо помилки
+        # (щоб один битий файл серед пʼяти не приховав, що інші чотири
+        # імпортувались нормально)
+        if imported and not errors:
+            names = ", ".join(imported)
+            messagebox.showinfo(
+                "Успіх",
+                f"Імпортовано тем: {len(imported)} ({names}).\nПерезапустіть лаунчер, щоб застосувати обрану."
+            )
+        elif imported and errors:
+            names = ", ".join(imported)
+            err_list = "\n".join(errors)
+            messagebox.showwarning(
+                "Імпортовано частково",
+                f"Успішно імпортовано ({len(imported)}): {names}.\n\n"
+                f"Не вдалося імпортувати ({len(errors)}):\n{err_list}\n\n"
+                f"Перезапустіть лаунчер, щоб застосувати обрану тему."
+            )
+        else:
+            err_list = "\n".join(errors)
+            messagebox.showerror("Помилка", f"Жодну тему не вдалося імпортувати:\n{err_list}")
 
     def validate_theme_file(self, file_path):
         """ Перевіряє, що обраний .json файл — валідний JSON-об'єкт
