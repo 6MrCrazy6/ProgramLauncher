@@ -129,14 +129,30 @@ class InfoManager(ctk.CTkFrame):
             "'❌ Повний вихід з програми' внизу лаунчера або правий клік по іконці в треї."
         )
 
-        # Крок 6 (З клікабельним посиланням на кастомізацію)
+        # Крок 7: Глобальні гарячі клавіші
+        self.add_step(
+            scroll_frame,
+            "7. Глобальні гарячі клавіші",
+            "У вкладці 'Налаштування' є кнопка '🎹 Керування гарячими клавішами...' — це єдине місце, "
+            "де зібрані й редагуються всі комбінації клавіш лаунчера.\n\n"
+            "• Одна комбінація (наприклад, Ctrl+Alt+L) миттєво розгортає головне вікно лаунчера з трею, "
+            "навіть якщо воно згорнуте чи не в фокусі.\n"
+            "• Кожному набору (пресету) можна окремо призначити свою комбінацію, щоб запускати його "
+            "напряму, без відкриття вікна взагалі.\n\n"
+            "Щоб задати клавішу — натисніть 🎙 і одразу натисніть потрібну комбінацію на клавіатурі, "
+            "або впишіть її вручну (напр. ctrl+alt+1), і збережіть кнопкою 💾. Функція працює лише за "
+            "наявності бібліотеки 'keyboard' (pip install keyboard) — якщо її не встановлено, лаунчер "
+            "про це попередить, а решта функціоналу продовжить працювати як завжди."
+        )
+
+        # Крок 8 (З клікабельним посиланням на кастомізацію)
         self.add_customization_step(scroll_frame)
 
         # Підвал програми (Footer)
         footer_frame = ctk.CTkFrame(self, fg_color="transparent")
         footer_frame.pack(pady=(15, 0), fill="x")
 
-        version_label = ctk.CTkLabel(footer_frame, text="Версія: 1.7.0 (Categories Update)", font=(None, 11),
+        version_label = ctk.CTkLabel(footer_frame, text="Версія: 1.8.0 (Hotkeys Update)", font=(None, 11),
                                      text_color="gray")
         version_label.pack(side="left", padx=10)
 
@@ -162,7 +178,7 @@ class InfoManager(ctk.CTkFrame):
         box = ctk.CTkFrame(master)
         box.pack(pady=6, fill="x", padx=5)
 
-        t_lbl = ctk.CTkLabel(box, text="7. Кастомізація інтерфейсу та готові теми", font=(None, 13, "bold"),
+        t_lbl = ctk.CTkLabel(box, text="8. Кастомізація інтерфейсу та готові теми", font=(None, 13, "bold"),
                              text_color=["#003F6C", "#E5E9F0"])
         t_lbl.pack(pady=(8, 6), padx=12, anchor="w")
 

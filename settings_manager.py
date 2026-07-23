@@ -4,10 +4,12 @@ import os
 import json
 import sys
 import shutil
+import threading
 import zipfile  # Модуль для роботи з резервними копіями
 import tempfile  # Для безпечної перевірки бекапу перед його застосуванням
 import winreg  # Модуль для роботи з автозапуском Windows
 import subprocess
+import hotkey_manager
 
 
 class ThemeCreatorWindow(ctk.CTkToplevel):
@@ -296,11 +298,200 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
             messagebox.showerror("Помилка", f"Не вдалося зберегти тему: {e}")
 
 
+class HotkeyManagerDialog(ctk.CTkToplevel):
+    """ Єдине вікно, де зібрані УСІ гарячі клавіші лаунчера: і глобальна
+    клавіша показу вікна з трею, і клавіші кожного окремого набору —
+    щоб не шукати їх по різних вкладках, а редагувати все в одному місці. """
+
+    def __init__(self, parent, settings_manager, preset_manager_ref):
+        super().__init__(parent)
+        self.settings_manager = settings_manager
+        self.preset_manager_ref = preset_manager_ref
+
+        self.title("Керування гарячими клавішами")
+        self.geometry("440x560")
+        self.minsize(360, 380)
+        self.transient(parent)
+
+        parent.update_idletasks()
+        px = parent.winfo_rootx() + (parent.winfo_width() // 2) - 220
+        py = parent.winfo_rooty() + (parent.winfo_height() // 2) - 280
+        self.geometry(f"+{max(px, 0)}+{max(py, 0)}")
+
+        self.create_widgets()
+        self.grab_set()
+
+    def create_widgets(self):
+        scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=5, pady=5)
+
+        if not hotkey_manager.is_available():
+            warn = ctk.CTkLabel(
+                scroll,
+                text="⚠ Бібліотека 'keyboard' не встановлена — гарячі клавіші не "
+                     "працюватимуть, поки її не встановити.\nКоманда: pip install keyboard",
+                font=(None, 11), text_color=("#B22222", "#FF7B7B"),
+                justify="left", anchor="w", wraplength=380
+            )
+            warn.pack(pady=(10, 5), padx=15, anchor="w", fill="x")
+
+        # --- Показ вікна лаунчера ---
+        show_box = ctk.CTkFrame(scroll)
+        show_box.pack(pady=(10, 8), padx=10, fill="x")
+        ctk.CTkLabel(
+            show_box, text="🖥 Показати вікно лаунчера з трею", font=(None, 12, "bold")
+        ).pack(pady=(8, 2), padx=10, anchor="w")
+        ctk.CTkLabel(
+            show_box, text="Спрацьовує завжди, навіть якщо вікно згорнуте.",
+            font=(None, 10), text_color="gray", anchor="w"
+        ).pack(pady=(0, 5), padx=10, anchor="w")
+
+        self._build_hotkey_row(
+            show_box,
+            initial_value=self.settings_manager.get_show_hotkey(),
+            on_save=self._save_show_hotkey
+        )
+
+        # --- Набори ---
+        presets_box = ctk.CTkFrame(scroll)
+        presets_box.pack(pady=(0, 10), padx=10, fill="x")
+        ctk.CTkLabel(
+            presets_box, text="🚀 Миттєвий запуск наборів", font=(None, 12, "bold")
+        ).pack(pady=(8, 2), padx=10, anchor="w")
+        ctk.CTkLabel(
+            presets_box, text="Запускає весь набір програм без відкриття вікна лаунчера.",
+            font=(None, 10), text_color="gray", anchor="w"
+        ).pack(pady=(0, 5), padx=10, anchor="w")
+
+        presets = self.preset_manager_ref.presets if self.preset_manager_ref else {}
+        preset_names = [n for n, d in presets.items() if isinstance(d, dict)]
+
+        if not preset_names:
+            ctk.CTkLabel(
+                presets_box,
+                text="Немає жодного набору. Створіть набір у вкладці 'Набори',\n"
+                     "щоб можна було призначити йому гарячу клавішу.",
+                font=(None, 11), text_color="gray", justify="left", anchor="w"
+            ).pack(pady=(0, 12), padx=10, anchor="w", fill="x")
+        else:
+            for name in preset_names:
+                row_box = ctk.CTkFrame(presets_box, fg_color="transparent")
+                row_box.pack(pady=(2, 8), padx=10, fill="x")
+                ctk.CTkLabel(row_box, text=name, anchor="w", font=(None, 11, "bold")).pack(anchor="w", padx=2)
+
+                current_hk = presets.get(name, {}).get("hotkey", "")
+                self._build_hotkey_row(
+                    row_box,
+                    initial_value=current_hk,
+                    on_save=lambda hk, n=name: self._save_preset_hotkey(n, hk)
+                )
+
+        ctk.CTkButton(self, text="Закрити", command=self.destroy).pack(pady=(0, 12), padx=15, fill="x")
+
+    def _build_hotkey_row(self, container, initial_value, on_save):
+        """ Створює один рядок "поле вводу + 🎙 записати + 💾 зберегти".
+        Уся логіка збереження замикається через callback on_save(hotkey),
+        завдяки чому цей самий рядок обслуговує і клавішу показу вікна,
+        і клавішу будь-якого окремого набору без дублювання коду. """
+        row = ctk.CTkFrame(container, fg_color="transparent")
+        row.pack(pady=(0, 8), padx=10, fill="x")
+
+        entry = ctk.CTkEntry(row, placeholder_text="напр: ctrl+alt+l")
+        entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        if initial_value:
+            entry.insert(0, initial_value)
+
+        record_btn = ctk.CTkButton(row, text="🎙", width=32, fg_color="transparent", border_width=1,
+                                    text_color=("#001F3F", "#E5E9F0"))
+        record_btn.pack(side="left", padx=(0, 4))
+
+        def do_record():
+            if not hotkey_manager.is_available():
+                messagebox.showwarning(
+                    "Недоступно",
+                    "Бібліотека 'keyboard' не встановлена.\nВстановіть: pip install keyboard"
+                )
+                return
+            record_btn.configure(text="...", state="disabled")
+
+            def listen():
+                combo = hotkey_manager.record_hotkey()
+                self.after(0, lambda: _on_recorded(combo))
+
+            def _on_recorded(combo):
+                record_btn.configure(text="🎙", state="normal")
+                if combo:
+                    entry.delete(0, "end")
+                    entry.insert(0, combo)
+
+            threading.Thread(target=listen, daemon=True).start()
+
+        record_btn.configure(command=do_record)
+
+        def do_save():
+            raw = entry.get().strip()
+            normalized = hotkey_manager.normalize_hotkey(raw) if raw else ""
+            if raw and normalized is None:
+                messagebox.showerror(
+                    "Некоректна комбінація",
+                    f"Не вдалося розпізнати «{raw}».\nПриклад: ctrl+alt+l"
+                )
+                return
+            on_save(normalized or "")
+
+        ctk.CTkButton(row, text="💾", width=32, command=do_save).pack(side="left")
+
+    def _save_show_hotkey(self, normalized):
+        self.settings_manager.set_show_hotkey(normalized)
+        if normalized:
+            messagebox.showinfo("Готово", f"Гаряча клавіша «{normalized}» тепер відкриває лаунчер.")
+        else:
+            messagebox.showinfo("Готово", "Глобальну гарячу клавішу показу вікна вимкнено.")
+
+    def _save_preset_hotkey(self, name, normalized):
+        """ Зберігає гарячу клавішу набору через PresetManager (єдине
+        джерело правди для presets.json), попереджаючи про конфлікти
+        з уже зайнятими комбінаціями. """
+        if not self.preset_manager_ref:
+            return
+
+        if normalized:
+            conflicts = []
+            if self.settings_manager.get_show_hotkey() == normalized:
+                conflicts.append("показу вікна лаунчера")
+            for other_name, other_data in self.preset_manager_ref.presets.items():
+                if other_name != name and isinstance(other_data, dict) and \
+                        (other_data.get("hotkey") or "").strip().lower() == normalized:
+                    conflicts.append(f"набору «{other_name}»")
+            if conflicts:
+                messagebox.showwarning(
+                    "Комбінація вже використовується",
+                    f"Клавіша «{normalized}» вже призначена для: {', '.join(conflicts)}.\n\n"
+                    "Можна залишити так, але спрацюють ОБИДВІ дії одночасно."
+                )
+
+        self.preset_manager_ref.set_preset_hotkey(name, normalized)
+        if normalized:
+            messagebox.showinfo("Готово", f"Гаряча клавіша «{normalized}» тепер запускає набір «{name}».")
+        else:
+            messagebox.showinfo("Готово", f"Гарячу клавішу для набору «{name}» прибрано.")
+
+
 class SettingsManager(ctk.CTkFrame):
-    def __init__(self, master, restart_callback=None, **kwargs):
+    def __init__(self, master, restart_callback=None, hotkeys_changed_callback=None, preset_manager_ref=None, **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
         self.app = master
         self.restart_callback_func = restart_callback
+        # Викликається щоразу, коли глобальна гаряча клавіша (показ вікна)
+        # змінюється, щоб головний файл лаунчера перереєстрував хуки клавіатури
+        self.hotkeys_changed_callback = hotkeys_changed_callback
+        # Посилання на PresetManager — потрібне централізованому вікну
+        # "Керування гарячими клавішами", щоб показувати і редагувати
+        # гарячі клавіші всіх наборів прямо з Налаштувань
+        self.preset_manager_ref = preset_manager_ref
+        # Валідована (перевірена keyboard.parse_hotkey) комбінація — саме вона
+        # йде у settings.json, а не сирий текст із поля вводу "на льоту"
+        self._validated_show_hotkey = "ctrl+alt+l"
 
         # Базовая папка программы
         if getattr(sys, "frozen", False):
@@ -321,7 +512,8 @@ class SettingsManager(ctk.CTkFrame):
             "close_after_launch": False,
             "minimize_to_tray": True,
             "delay": 0,
-            "windows_autostart": False
+            "windows_autostart": False,
+            "show_hotkey": "ctrl+alt+l"
         }
 
         self.ensure_base_theme_exists()
@@ -450,6 +642,7 @@ class SettingsManager(ctk.CTkFrame):
 
         self.btn_reset_themes = ctk.CTkButton(self.color_box, text="💥 Скинути всі кастомні теми",
                                               fg_color="transparent", border_width=1, height=24,
+                                              text_color=("#001F3F", "#E5E9F0"),
                                               command=self.reset_to_factory_themes)
         self.btn_reset_themes.pack(pady=(2, 5), padx=12, fill="x")
 
@@ -510,6 +703,38 @@ class SettingsManager(ctk.CTkFrame):
         self.delay_slider = ctk.CTkSlider(self.delay_box, from_=0, to=10, number_of_steps=10,
                                           command=self.on_slider_move)
         self.delay_slider.pack(pady=8, padx=10, fill="x")
+
+        # 4.5 Гарячі клавіші (централізоване керування — окреме вікно)
+        self.hotkey_box = ctk.CTkFrame(self.scroll_container)
+        self.hotkey_box.pack(pady=8, fill="x")
+        ctk.CTkLabel(
+            self.hotkey_box, text="⌨️ Гарячі клавіші:", font=(None, 12, "bold")
+        ).pack(pady=(5, 2), padx=10, anchor="w")
+
+        hotkey_hint = ctk.CTkLabel(
+            self.hotkey_box,
+            text="Показ вікна лаунчера з трею та миттєвий запуск окремих\n"
+                 "наборів без відкриття вікна — усі комбінації клавіш\n"
+                 "зібрані і редагуються в одному вікні.",
+            font=(None, 10), text_color="gray", justify="left", anchor="w"
+        )
+        hotkey_hint.pack(pady=(0, 6), padx=10, anchor="w", fill="x")
+        self._make_responsive(self.hotkey_box, hotkey_hint)
+
+        ctk.CTkButton(
+            self.hotkey_box,
+            text="🎹 Керування гарячими клавішами...",
+            command=self.open_hotkeys_dialog
+        ).pack(pady=(0, 10), padx=10, fill="x")
+
+        if not hotkey_manager.is_available():
+            ctk.CTkLabel(
+                self.hotkey_box,
+                text="⚠ Бібліотека 'keyboard' не знайдена — гарячі клавіші не "
+                     "працюватимуть.\nВстановіть командою: pip install keyboard",
+                font=(None, 10), text_color=("#B22222", "#FF7B7B"),
+                justify="left", anchor="w"
+            ).pack(pady=(0, 8), padx=10, anchor="w", fill="x")
 
         # 5. Резервне копіювання
         self.backup_box = ctk.CTkFrame(self.scroll_container)
@@ -797,6 +1022,23 @@ class SettingsManager(ctk.CTkFrame):
             self.app.protocol('WM_DELETE_WINDOW', self.app.exit_program)
         self.save_settings()
 
+    def open_hotkeys_dialog(self):
+        """ Відкриває окреме вікно, де зібрані УСІ гарячі клавіші лаунчера
+        (показ вікна + всі набори) в одному місці. """
+        HotkeyManagerDialog(self.app, self, self.preset_manager_ref)
+
+    def get_show_hotkey(self):
+        """ Поточна (валідована) гаряча клавіша показу вікна лаунчера. """
+        return self._validated_show_hotkey
+
+    def set_show_hotkey(self, normalized_hotkey):
+        """ Зберігає нову гарячу клавішу показу вікна (порожній рядок —
+        вимкнути) та одразу перереєстровує глобальні хуки клавіатури. """
+        self._validated_show_hotkey = normalized_hotkey or ""
+        self.save_settings()
+        if self.hotkeys_changed_callback:
+            self.hotkeys_changed_callback()
+
     def save_settings(self):
         settings = {
             "theme": self.theme_dropdown.get(),
@@ -805,7 +1047,8 @@ class SettingsManager(ctk.CTkFrame):
             "minimize_to_tray": self.tray_checkbox.get() == 1,
             "delay": int(self.delay_slider.get()),
             "windows_autostart": self.autostart_checkbox.get() == 1,
-            "smart_launch": self.smart_launch_checkbox.get() == 1
+            "smart_launch": self.smart_launch_checkbox.get() == 1,
+            "show_hotkey": self._validated_show_hotkey
         }
         try:
             with open(self.settings_file, "w", encoding="utf-8") as f:
@@ -845,6 +1088,8 @@ class SettingsManager(ctk.CTkFrame):
                 delay_val = st.get("delay", 0)
                 self.delay_slider.set(delay_val)
                 self.delay_label.configure(text=f"Затримка між запуском програм: {delay_val} сек.")
+
+                self._validated_show_hotkey = (st.get("show_hotkey", "ctrl+alt+l") or "").strip().lower()
             except Exception as e:
                 print(f"Помилка завантаження налаштувань: {e}")
         else:

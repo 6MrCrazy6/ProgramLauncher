@@ -12,7 +12,7 @@ class PresetManager(ctk.CTkFrame):
     CATEGORY_ALL = "Всі"
     CATEGORY_UNSET = "Без категорії"
 
-    def __init__(self, master, **kwargs):
+    def __init__(self, master, on_hotkeys_changed=None, **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
         self.presets_file = "jsons_saves/presets.json"
         self.all_programs = []
@@ -22,6 +22,10 @@ class PresetManager(ctk.CTkFrame):
         # від того, чи показані вони зараз під поточним фільтром категорій.
         # Без цього перемикання фільтра "губило" б уже зроблений вибір.
         self.program_selection = {}
+        # Викликається щоразу, коли гаряча клавіша якогось набору змінилась
+        # (додана/змінена/видалена), щоб головний файл лаунчера перереєстрував
+        # глобальні хуки клавіатури з актуальними даними
+        self.on_hotkeys_changed = on_hotkeys_changed
 
         os.makedirs("jsons_saves", exist_ok=True)
         self.load_presets()
@@ -132,6 +136,11 @@ class PresetManager(ctk.CTkFrame):
             fill="x"
         )
 
+        # Примітка: гарячі клавіші наборів більше не редагуються тут —
+        # усе, що стосується гарячих клавіш (і показу вікна, і наборів),
+        # централізовано у вкладці "Налаштування" -> "Керування гарячими
+        # клавішами...", щоб не дублювати цю настройку по різних вкладках.
+
         self.autostart_checkbox = ctk.CTkCheckBox(
             manage_frame,
             text="🚀 Стартовий набір: запускати цей набір одразу при відкритті лаунчера",
@@ -184,6 +193,7 @@ class PresetManager(ctk.CTkFrame):
             text="❌ Видалити цей набір",
             fg_color="transparent",
             border_width=1,
+            text_color=("#001F3F", "#E5E9F0"),
             command=self.delete_preset
         )
         self.btn_delete.pack(
@@ -320,6 +330,41 @@ class PresetManager(ctk.CTkFrame):
     def on_preset_changed(self, choice):
         self.refresh_autostart_checkbox_state()
 
+    def get_preset_hotkeys(self):
+        """ Повертає {назва_набору: гаряча_клавіша} лише для наборів,
+        яким реально призначена непорожня комбінація. Використовується
+        головним файлом лаунчера для реєстрації глобальних хуків. """
+        result = {}
+        for name, data in self.presets.items():
+            if isinstance(data, dict):
+                hk = (data.get("hotkey") or "").strip()
+                if hk:
+                    result[name] = hk
+        return result
+
+    def set_preset_hotkey(self, name, hotkey):
+        """ Програмно встановлює/прибирає гарячу клавішу набору за назвою
+        і одразу зберігає у presets.json. Викликається виключно з
+        централізованого вікна "Керування гарячими клавішами" у
+        Налаштуваннях (єдине місце в лаунчері, де редагуються гарячі
+        клавіші), тому значення сюди вже приходить нормалізованим ззовні.
+        Повертає True, якщо набір знайдено і значення збережено. """
+        if name not in self.presets:
+            return False
+
+        if not isinstance(self.presets[name], dict):
+            self.presets[name] = {"programs": []}
+
+        self.presets[name]["hotkey"] = hotkey or ""
+
+        with open(self.presets_file, "w", encoding="utf-8") as file:
+            json.dump(self.presets, file, indent=4, ensure_ascii=False)
+
+        if self.on_hotkeys_changed:
+            self.on_hotkeys_changed()
+
+        return True
+
     def refresh_autostart_checkbox_state(self):
         """ Синхронізує стан чекбокса автозапуску з даними обраного пресету """
         selected = self.preset_dropdown.get()
@@ -374,8 +419,14 @@ class PresetManager(ctk.CTkFrame):
     def launch_current_preset(self):
         selected = self.preset_dropdown.get()
         if selected == "Немає створених наборів": return
+        self.launch_preset_by_name(selected)
 
-        preset = self.presets.get(selected)
+    def launch_preset_by_name(self, name):
+        """ Запускає всі програми обраного набору за його назвою.
+        Винесено окремо від launch_current_preset, щоб цю саму логіку
+        можна було викликати і з випадаючого списку на екрані, і напряму
+        з глобальної гарячої клавіші (без відкриття вікна лаунчера). """
+        preset = self.presets.get(name)
         if preset and "programs" in preset:
             smart_launch = self._is_smart_launch_enabled()
             for prog_item in preset["programs"]:
@@ -422,6 +473,9 @@ class PresetManager(ctk.CTkFrame):
 
             with open(self.presets_file, "w", encoding="utf-8") as file:
                 json.dump(self.presets, file, indent=4, ensure_ascii=False)
+
+            if self.on_hotkeys_changed:
+                self.on_hotkeys_changed()
 
             self.update_dropdown()
 

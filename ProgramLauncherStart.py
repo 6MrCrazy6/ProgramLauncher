@@ -23,6 +23,10 @@ from schedule_manager import ScheduleManager
 # "Розумний запуск": не відкривати програму повторно, якщо вона вже працює
 from process_utils import smart_startfile, resolve_program_entry
 
+# Глобальні гарячі клавіші (показ вікна лаунчера, запуск наборів) —
+# опціональний функціонал на базі бібліотеки 'keyboard'
+import hotkey_manager
+
 # --- НАЛАШТУВАННЯ CTYPES ДЛЯ DRAG & DROP НА WINDOWS ---
 # Зберігаємо глобальне посилання на callback-функцію, щоб її не видалив GC (Garbage Collector)
 _global_wndproc_ref = None
@@ -165,10 +169,57 @@ def withdraw_window():
     app.withdraw()
 
 
+# Централізований менеджер глобальних гарячих клавіш (показ вікна +
+# запуск конкретних наборів). Створюється один раз при старті і
+# перереєстровується щоразу, коли користувач змінює якусь комбінацію.
+hotkey_mgr = hotkey_manager.HotkeyManager()
+
+
+def rebuild_global_hotkeys():
+    """ Перечитує гарячу клавішу показу вікна з settings.json та гарячі
+    клавіші наборів з preset_manager_frame і перереєстровує глобальні
+    хуки клавіатури. Викликається один раз при старті лаунчера, а також
+    щоразу, коли користувач змінює будь-яку з комбінацій (у вкладках
+    'Налаштування' чи 'Набори').
+
+    Callback'и, що надходять від бібліотеки 'keyboard', виконуються у
+    фоновому потоці системного хука — тому виклики, що торкаються
+    інтерфейсу Tkinter (показ вікна, запуск набору), обов'язково
+    передаються в головний потік через app.after(0, ...), інакше
+    можливе зависання чи збій CTk. """
+    if getattr(sys, "frozen", False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    settings_file = os.path.join(base_dir, "jsons_saves", "settings.json")
+
+    show_hotkey = "ctrl+alt+l"
+    if os.path.exists(settings_file):
+        try:
+            with open(settings_file, "r", encoding="utf-8") as f:
+                show_hotkey = json.load(f).get("show_hotkey", "ctrl+alt+l")
+        except Exception:
+            pass
+
+    preset_hotkeys = preset_manager_frame.get_preset_hotkeys()
+
+    hotkey_mgr.rebuild(
+        show_hotkey=show_hotkey,
+        show_callback=lambda: app.after(0, show_window),
+        preset_hotkeys=preset_hotkeys,
+        launch_preset_callback=lambda name: app.after(
+            0, lambda n=name: preset_manager_frame.launch_preset_by_name(n)
+        )
+    )
+
+
 def exit_program():
     global tray_icon
     if tray_icon:
         tray_icon.stop()
+    # Знімаємо всі гарячі клавіші, щоб не лишати "висячий" системний хук
+    hotkey_mgr.stop()
     # Коректно зупиняємо фоновий потік перевірки розкладу перед виходом
     try:
         schedule_manager_frame.stop_checking_loop()
@@ -183,6 +234,7 @@ def restart_program():
     global tray_icon
     if tray_icon:
         tray_icon.stop()
+    hotkey_mgr.stop()
     app.quit()
 
     # Визначаємо, чи запущено як скрипт чи як скомпільований .exe
@@ -268,6 +320,7 @@ category_filter_dropdown.set(CATEGORY_ALL)
 manage_categories_btn = ctk.CTkButton(
     category_filter_frame, text="🗑", width=32,
     fg_color="transparent", border_width=1,
+    text_color=("#001F3F", "#E5E9F0"),
     command=lambda: manage_categories_dialog()
 )
 manage_categories_btn.pack(side="left", padx=(8, 0))
@@ -480,6 +533,7 @@ def ask_category_dialog(parent_window, program_name, current_value, existing_cat
                 list_frame, text=("✓ " if is_current else "") + cat,
                 fg_color=("gray75", "gray28") if is_current else "transparent",
                 border_width=1, anchor="w",
+                text_color=("#001F3F", "#E5E9F0"),
                 command=lambda c=cat: pick(c)
             ).pack(pady=2, fill="x")
     else:
@@ -502,7 +556,8 @@ def ask_category_dialog(parent_window, program_name, current_value, existing_cat
     ctk.CTkButton(btns_frame, text="💾 Зберегти", command=confirm).pack(
         side="left", expand=True, fill="x", padx=(0, 5)
     )
-    ctk.CTkButton(btns_frame, text="Скасувати", fg_color="transparent", border_width=1, command=cancel).pack(
+    ctk.CTkButton(btns_frame, text="Скасувати", fg_color="transparent", border_width=1,
+                  text_color=("#001F3F", "#E5E9F0"), command=cancel).pack(
         side="left", expand=True, fill="x", padx=(5, 0)
     )
 
@@ -580,6 +635,7 @@ def manage_categories_dialog():
             ctk.CTkButton(
                 row, text="🗑 Видалити", width=100,
                 fg_color="transparent", border_width=1,
+                text_color=("#001F3F", "#E5E9F0"),
                 command=lambda c=cat: do_delete(c)
             ).pack(side="right")
     else:
@@ -758,10 +814,17 @@ def delete_selected():
     refresh_programs()
 
 
-# Ініціалізація менеджерів (Передаємо посилання на перезапуск у SettingsManager)
-preset_manager_frame = PresetManager(app)
+# Ініціалізація менеджерів (Передаємо посилання на перезапуск у SettingsManager,
+# а також колбек rebuild_global_hotkeys — щоб гарячі клавіші миттєво
+# перереєстровувались одразу після їх зміни у Наборах чи Налаштуваннях)
+preset_manager_frame = PresetManager(app, on_hotkeys_changed=rebuild_global_hotkeys)
 schedule_manager_frame = ScheduleManager(app, exit_program)
-settings_manager_frame = SettingsManager(app, restart_callback=restart_program)  # <--- ПЕРЕДАЛИ ФУНКЦІЮ
+settings_manager_frame = SettingsManager(
+    app,
+    restart_callback=restart_program,
+    hotkeys_changed_callback=rebuild_global_hotkeys,
+    preset_manager_ref=preset_manager_frame
+)
 info_manager_frame = InfoManager(app)
 
 button_frame = ctk.CTkFrame(main_ui_frame, fg_color="transparent")
@@ -779,10 +842,16 @@ global_exit_btn = ctk.CTkButton(
     text="❌ Повний вихід з програми",
     fg_color="transparent",
     border_width=1,
+    text_color=("#001F3F", "#E5E9F0"),
     command=exit_program
 )
 global_exit_btn.pack(fill="x", ipady=3)
 
 load_programs()
 check_and_run_autostart()
+
+# Реєструємо глобальні гарячі клавіші (показ вікна + всі набори з
+# призначеною комбінацією) вже після того, як усі дані завантажені
+rebuild_global_hotkeys()
+
 app.mainloop()

@@ -218,13 +218,17 @@ class ScheduleManager(ctk.CTkFrame):
             lbl.pack(side="left", fill="x", expand=True, padx=5)
             self._make_responsive(row, lbl, label_padx=45)
 
-            # Кнопка видалення тепер адаптивна (без жорстких кольорів, використовує border_width)
+            # Кнопка видалення прозора (використовує border_width замість заливки),
+            # тому колір тексту задаємо явно під обидві теми — інакше він лишається
+            # світлим (кольором тексту звичайної кнопки) навіть у світлій темі,
+            # і на світлому фоні фрейму стає майже невидимим
             btn_del = ctk.CTkButton(
                 row,
                 text="❌",
                 width=30,
                 fg_color="transparent",
                 border_width=1,
+                text_color=("#001F3F", "#E5E9F0"),
                 command=lambda i=idx: self.delete_task(i)
             )
             btn_del.pack(side="right", padx=5)
