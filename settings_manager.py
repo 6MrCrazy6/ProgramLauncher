@@ -10,6 +10,7 @@ import tempfile  # Для безпечної перевірки бекапу п�
 import winreg  # Модуль для роботи з автозапуском Windows
 import subprocess
 import hotkey_manager
+import stats_manager
 
 
 class ThemeCreatorWindow(ctk.CTkToplevel):
@@ -477,8 +478,132 @@ class HotkeyManagerDialog(ctk.CTkToplevel):
             messagebox.showinfo("Готово", f"Гарячу клавішу для набору «{name}» прибрано.")
 
 
+class StatsDialog(ctk.CTkToplevel):
+    """ Єдине вікно статистики використання: показує, скільки разів
+    реально було запущено кожну програму через лаунчер (з головного
+    списку, з наборів, за розкладом чи в автозапуску) — у вигляді
+    простого горизонтального графіка, від найбільш використовуваної
+    до найменш використовуваної. Допомагає користувачу побачити, який
+    софт йому дійсно потрібен, а який можна прибрати зі списку. """
+
+    MAX_BAR_WIDTH = 220
+
+    def __init__(self, parent, programs_provider, on_reset=None):
+        super().__init__(parent)
+        # programs_provider — функція без аргументів, що повертає АКТУАЛЬНИЙ
+        # список програм (з головного екрана), щоб зіставити збережені у
+        # stats_manager шляхи з людськими назвами програм
+        self.programs_provider = programs_provider
+        # Викликається після скидання статистики, щоб головний екран одразу
+        # оновив лічильники (▶ N) біля програм, не чекаючи наступної дії
+        self.on_reset = on_reset
+
+        self.title("Статистика використання")
+        self.geometry("480x580")
+        self.minsize(380, 380)
+        self.transient(parent)
+
+        parent.update_idletasks()
+        px = parent.winfo_rootx() + (parent.winfo_width() // 2) - 240
+        py = parent.winfo_rooty() + (parent.winfo_height() // 2) - 290
+        self.geometry(f"+{max(px, 0)}+{max(py, 0)}")
+
+        self.create_widgets()
+        self.grab_set()
+
+    def _get_ranked_stats(self):
+        """ Повертає [(назва, кількість запусків), ...] для програм з
+        поточного списку, відсортовані за спаданням. Записи статистики
+        для вже видалених програм (яких немає у programs_provider)
+        просто ігноруються — показуємо тільки актуальний список. """
+        programs = self.programs_provider() if self.programs_provider else []
+        result = [(p["name"], stats_manager.get_count(p["path"])) for p in programs]
+        result.sort(key=lambda item: item[1], reverse=True)
+        return result
+
+    def create_widgets(self):
+        ctk.CTkLabel(
+            self, text="📊 Скільки разів запущено кожну програму", font=(None, 13, "bold")
+        ).pack(pady=(12, 4), padx=15, anchor="w")
+
+        hint = ctk.CTkLabel(
+            self,
+            text="Рахуються лише реальні запуски через лаунчер — зі списку 'Програми', "
+                 "з наборів, за розкладом чи в автозапуску. Допомагає побачити, який софт "
+                 "дійсно потрібен, а який можна прибрати зі списку.",
+            font=(None, 10), text_color="gray", justify="left", anchor="w", wraplength=440
+        )
+        hint.pack(pady=(0, 10), padx=15, anchor="w", fill="x")
+
+        self.scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self.scroll.pack(fill="both", expand=True, padx=10, pady=(0, 5))
+
+        self.render_chart()
+
+        ctk.CTkButton(
+            self, text="🗑 Скинути всю статистику", fg_color="transparent", border_width=1,
+            text_color=("#001F3F", "#E5E9F0"),
+            command=self.confirm_reset_all
+        ).pack(pady=(5, 5), padx=15, fill="x")
+
+        ctk.CTkButton(self, text="Закрити", command=self.destroy).pack(pady=(0, 12), padx=15, fill="x")
+
+    def render_chart(self):
+        """ (Пере)малює графік з нуля — викликається і при першому відкритті,
+        і одразу після скидання статистики, щоб вікно показувало актуальні дані. """
+        for widget in self.scroll.winfo_children():
+            widget.destroy()
+
+        data = self._get_ranked_stats()
+
+        if not data:
+            ctk.CTkLabel(
+                self.scroll,
+                text="Немає жодної доданої програми на вкладці 'Програми'.",
+                text_color="gray"
+            ).pack(pady=20)
+            return
+
+        max_count = max(count for _, count in data) or 1
+
+        for name, count in data:
+            display_name = name if len(name) <= 22 else name[:21] + "…"
+
+            row = ctk.CTkFrame(self.scroll, fg_color="transparent")
+            row.pack(fill="x", pady=3)
+
+            ctk.CTkLabel(row, text=display_name, anchor="w", width=150).pack(side="left", padx=(0, 8))
+
+            bar_track = ctk.CTkFrame(
+                row, height=16, width=self.MAX_BAR_WIDTH,
+                fg_color=("#DCE4EE", "#001F3F"), corner_radius=3
+            )
+            bar_track.pack(side="left", padx=(0, 8))
+            bar_track.pack_propagate(False)
+
+            bar_width = max(int(self.MAX_BAR_WIDTH * count / max_count), 2) if count else 0
+            if bar_width:
+                ctk.CTkFrame(
+                    bar_track, height=16, width=bar_width,
+                    fg_color=("#003F6C", "#5B9BD5"), corner_radius=3
+                ).place(x=0, y=0)
+
+            ctk.CTkLabel(row, text=str(count), width=28, anchor="w").pack(side="left")
+
+    def confirm_reset_all(self):
+        if messagebox.askyesno(
+            "Скинути статистику",
+            "Скинути лічильники запусків для ВСІХ програм?\nЦю дію не можна скасувати."
+        ):
+            stats_manager.reset_all()
+            self.render_chart()
+            if self.on_reset:
+                self.on_reset()
+
+
 class SettingsManager(ctk.CTkFrame):
-    def __init__(self, master, restart_callback=None, hotkeys_changed_callback=None, preset_manager_ref=None, **kwargs):
+    def __init__(self, master, restart_callback=None, hotkeys_changed_callback=None, preset_manager_ref=None,
+                 programs_provider=None, stats_reset_callback=None, **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
         self.app = master
         self.restart_callback_func = restart_callback
@@ -489,6 +614,13 @@ class SettingsManager(ctk.CTkFrame):
         # "Керування гарячими клавішами", щоб показувати і редагувати
         # гарячі клавіші всіх наборів прямо з Налаштувань
         self.preset_manager_ref = preset_manager_ref
+        # Функція без аргументів, що повертає актуальний список програм —
+        # потрібна вікну статистики, щоб зіставити шляхи (ключі stats_manager)
+        # з людськими назвами програм
+        self.programs_provider = programs_provider
+        # Викликається після скидання статистики у вікні "Статистика
+        # використання", щоб головний екран одразу оновив лічильники (▶ N)
+        self.stats_reset_callback = stats_reset_callback
         # Валідована (перевірена keyboard.parse_hotkey) комбінація — саме вона
         # йде у settings.json, а не сирий текст із поля вводу "на льоту"
         self._validated_show_hotkey = "ctrl+alt+l"
@@ -735,6 +867,28 @@ class SettingsManager(ctk.CTkFrame):
                 font=(None, 10), text_color=("#B22222", "#FF7B7B"),
                 justify="left", anchor="w"
             ).pack(pady=(0, 8), padx=10, anchor="w", fill="x")
+
+        # 4.7 Статистика використання (централізоване керування — окреме вікно)
+        self.stats_box = ctk.CTkFrame(self.scroll_container)
+        self.stats_box.pack(pady=8, fill="x")
+        ctk.CTkLabel(
+            self.stats_box, text="📊 Статистика використання:", font=(None, 12, "bold")
+        ).pack(pady=(5, 2), padx=10, anchor="w")
+
+        stats_hint = ctk.CTkLabel(
+            self.stats_box,
+            text="Скільки разів кожну програму реально було запущено через\n"
+                 "лаунчер — щоб було видно, який софт дійсно потрібен.",
+            font=(None, 10), text_color="gray", justify="left", anchor="w"
+        )
+        stats_hint.pack(pady=(0, 6), padx=10, anchor="w", fill="x")
+        self._make_responsive(self.stats_box, stats_hint)
+
+        ctk.CTkButton(
+            self.stats_box,
+            text="📊 Переглянути статистику...",
+            command=self.open_stats_dialog
+        ).pack(pady=(0, 10), padx=10, fill="x")
 
         # 5. Резервне копіювання
         self.backup_box = ctk.CTkFrame(self.scroll_container)
@@ -1026,6 +1180,18 @@ class SettingsManager(ctk.CTkFrame):
         """ Відкриває окреме вікно, де зібрані УСІ гарячі клавіші лаунчера
         (показ вікна + всі набори) в одному місці. """
         HotkeyManagerDialog(self.app, self, self.preset_manager_ref)
+
+    def open_stats_dialog(self):
+        """ Відкриває окреме вікно статистики використання (графік запусків
+        + кнопка повного скидання) — так само централізовано, як і вікно
+        гарячих клавіш вище. """
+        if not self.programs_provider:
+            messagebox.showwarning(
+                "Недоступно",
+                "Список програм недоступний — спробуйте перезапустити лаунчер."
+            )
+            return
+        StatsDialog(self.app, self.programs_provider, on_reset=self.stats_reset_callback)
 
     def get_show_hotkey(self):
         """ Поточна (валідована) гаряча клавіша показу вікна лаунчера. """

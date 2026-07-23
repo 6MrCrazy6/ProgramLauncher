@@ -22,6 +22,7 @@ from schedule_manager import ScheduleManager
 
 # "Розумний запуск": не відкривати програму повторно, якщо вона вже працює
 from process_utils import smart_startfile, resolve_program_entry
+import stats_manager
 
 # Глобальні гарячі клавіші (показ вікна лаунчера, запуск наборів) —
 # опціональний функціонал на базі бібліотеки 'keyboard'
@@ -273,6 +274,10 @@ def toggle_interface(value):
 
     if value == "📱 Програми":
         main_ui_frame.pack(pady=5, padx=20, fill="both", expand=True)
+        # Лічильники запусків (▶ N) могли змінитися, поки користувач був
+        # на вкладці "Набори" чи "Розклад" (звідти теж можна запускати
+        # програми) — оновлюємо підписи, щоб цифри не були застарілими
+        refresh_programs()
     elif value == "⚙ Набори":
         preset_manager_frame.pack(pady=5, padx=20, fill="both", expand=True)
         preset_manager_frame.load_data_from_json(programs)
@@ -390,6 +395,21 @@ def update_category_filter_values():
         category_filter_dropdown.set(CATEGORY_ALL)
 
 
+def build_program_display_name(program):
+    """ Формує текст підпису чекбокса програми: назва (+ категорія,
+    позначка ⚙ за наявності аргументів запуску, і лічильник ▶ N —
+    скільки разів програму реально було запущено через лаунчер). """
+    display_name = program["name"]
+    cat = (program.get("category") or "").strip()
+    if cat:
+        display_name = f"[{cat}] {display_name}"
+    if program.get("args"):
+        display_name += "  ⚙"  # Позначка, що для програми задані аргументи запуску
+    launch_count = stats_manager.get_count(program["path"])
+    display_name += f"   ▶ {launch_count}"
+    return display_name
+
+
 def refresh_programs():
     update_category_filter_values()
     selected_category = category_filter_dropdown.get()
@@ -427,12 +447,7 @@ def refresh_programs():
         return
 
     for program in visible_programs:
-        display_name = program["name"]
-        cat = (program.get("category") or "").strip()
-        if cat:
-            display_name = f"[{cat}] {display_name}"
-        if program.get("args"):
-            display_name += "  ⚙"  # Позначка, що для програми задані аргументи запуску
+        display_name = build_program_display_name(program)
         checkbox = ctk.CTkCheckBox(program_frame, text=display_name)
         checkbox.pack(anchor="w", pady=5, padx=10, fill="x")
         program["checkbox"] = checkbox
@@ -444,9 +459,17 @@ def show_context_menu(event, program):
     context_menu.add_command(label=f"Перейменувати '{program['name']}'", command=lambda: rename_program(program))
     context_menu.add_command(label="⚙ Параметри запуску...", command=lambda: edit_program_args(program))
     context_menu.add_command(label="🏷 Категорія...", command=lambda: edit_program_category(program))
+    context_menu.add_command(label="🔄 Скинути лічильник запусків", command=lambda: reset_program_stats(program))
     context_menu.add_separator()
     context_menu.add_command(label="Видалити зі списку", command=lambda: delete_single_program(program))
     context_menu.tk_popup(event.x_root, event.y_root)
+
+
+def reset_program_stats(program):
+    """ Скидає лічильник запусків (▶ N) для конкретної програми на 0. """
+    stats_manager.reset(program["path"])
+    if program["checkbox"]:
+        program["checkbox"].configure(text=build_program_display_name(program))
 
 
 def rename_program(program):
@@ -740,6 +763,9 @@ def check_and_run_autostart():
                         elif status == "failed":
                             print(f"Не вдалося запустити {path}")
 
+                    if did_fresh_launch:
+                        refresh_programs()
+
                     if close_after:
                         exit_program()
 
@@ -802,6 +828,15 @@ def launch_selected():
 
     if launched_any and close_after:
         exit_program()
+        return
+
+    if did_fresh_launch:
+        # Оновлюємо лише текст підписів (лічильник ▶ N), НЕ перемальовуючи
+        # чекбокси заново — інакше поточний вибір користувача (галочки)
+        # загубився б одразу після запуску
+        for program in programs:
+            if program["checkbox"]:
+                program["checkbox"].configure(text=build_program_display_name(program))
 
 
 def delete_selected():
@@ -823,7 +858,9 @@ settings_manager_frame = SettingsManager(
     app,
     restart_callback=restart_program,
     hotkeys_changed_callback=rebuild_global_hotkeys,
-    preset_manager_ref=preset_manager_frame
+    preset_manager_ref=preset_manager_frame,
+    programs_provider=lambda: programs,
+    stats_reset_callback=lambda: refresh_programs()
 )
 info_manager_frame = InfoManager(app)
 

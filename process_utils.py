@@ -19,6 +19,8 @@
 
 import os
 
+import stats_manager
+
 try:
     import psutil
     _PSUTIL_AVAILABLE = True
@@ -93,7 +95,14 @@ def smart_startfile(path, args="", skip_if_running=True):
     тобто якщо той самий браузер вже відкритий БЕЗ потрібного сайту,
     "розумний запуск" все одно пропустить повторне відкриття з аргументом.
     Якщо для конкретної програми це небажано — вимкніть "Розумний запуск"
-    в Налаштуваннях або для цієї програми окремо не задавайте аргументи. """
+    в Налаштуваннях або для цієї програми окремо не задавайте аргументи.
+
+    Оскільки ЦЯ функція — єдина точка, через яку відбувається реальний
+    запуск софту (зі списку "Програми", з наборів, за розкладом і в
+    автозапуску), тут же і рахується статистика запусків (stats_manager):
+    лічильник конкретної програми збільшується лише за статусу "launched",
+    щоб цифра відображала фактичну кількість нових запусків, а не кліків
+    по вже відкритій програмі. """
     if skip_if_running and is_process_running(path):
         return "skipped_running"
 
@@ -108,6 +117,7 @@ def smart_startfile(path, args="", skip_if_running=True):
                 ctypes.windll.shell32.ShellExecuteW(None, "open", path, args, None, 1)
         else:
             os.startfile(path)
+        stats_manager.increment(path)
         return "launched"
     except Exception:
         return "failed"
