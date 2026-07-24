@@ -101,6 +101,8 @@ DEFAULT_STRINGS = {
         # --- Трей ---
         "main.tray_open": "📱 Відкрити лаунчер",
         "main.tray_exit": "❌ Повний вихід",
+        "main.already_running_title": "Program Launcher",
+        "main.already_running_text": "Лаунчер вже запущено (або він ще завантажується).\n\nБудь ласка, зачекайте — друга копія програми не потрібна.",
 
         # ============== SETTINGS TAB ==============
         "settings.theme_label": "Візуальна тема програми:",
@@ -330,7 +332,10 @@ DEFAULT_STRINGS = {
         "info.about_field_internal_name": "Внутрішня назва",
         "info.about_field_filename": "Ім'я файлу",
         "info.about_field_developer": "Розробник",
+        "info.about_field_license": "Ліцензія",
         "info.about_field_copyright": "Авторське право",
+        "info.about_license_link_text": "🔗 Повний текст ліцензії PolyForm Noncommercial",
+        "info.about_contact_text": "Пропозиції чи питання? Пишіть на:",
         "info.about_close_btn": "Закрити",
     },
     "en": {
@@ -391,6 +396,8 @@ DEFAULT_STRINGS = {
         # --- Tray ---
         "main.tray_open": "📱 Open launcher",
         "main.tray_exit": "❌ Exit completely",
+        "main.already_running_title": "Program Launcher",
+        "main.already_running_text": "The launcher is already running (or is still starting up).\n\nPlease wait — a second copy is not needed.",
 
         # ============== SETTINGS TAB ==============
         "settings.theme_label": "App visual theme:",
@@ -620,7 +627,10 @@ DEFAULT_STRINGS = {
         "info.about_field_internal_name": "Internal Name",
         "info.about_field_filename": "File Name",
         "info.about_field_developer": "Developer",
+        "info.about_field_license": "License",
         "info.about_field_copyright": "Copyright",
+        "info.about_license_link_text": "🔗 Full text of the PolyForm Noncommercial License",
+        "info.about_contact_text": "Suggestions or questions? Contact:",
         "info.about_close_btn": "Close",
     },
 }

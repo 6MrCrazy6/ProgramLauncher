@@ -239,6 +239,9 @@
     "info.about_field_internal_name": "Внутрішня назва",
     "info.about_field_filename": "Ім'я файлу",
     "info.about_field_developer": "Розробник",
+    "info.about_field_license": "Ліцензія",
     "info.about_field_copyright": "Авторське право",
-    "info.about_close_btn": "Закрити"
+    "info.about_close_btn": "Закрити",
+    "info.about_license_link_text": "🔗 Повний текст ліцензії PolyForm Noncommercial",
+    "info.about_contact_text": "Пропозиції чи питання? Пишіть на:"
 }

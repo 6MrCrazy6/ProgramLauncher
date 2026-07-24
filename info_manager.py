@@ -25,6 +25,16 @@ VERSION_INFO = {
     "copyright": "© 2026 YumekoDeVil (Inna Varchenko)",
 }
 
+# Ліцензія та контакти — так само як GitHub-посилання у кроці 9
+# інструкції (info.step9_link_text), не залежать від мови інтерфейсу,
+# тому зберігаються як константи, а не ключі локалізації.
+# Продубльовано в поле 'Comments' у version_info.txt, щоб та сама
+# інформація була видна і у властивостях зібраного .exe у Провіднику
+# Windows — якщо міняєте одне, оновіть і друге.
+LICENSE_NAME = "PolyForm Noncommercial License 1.0.0"
+LICENSE_URL = "https://polyformproject.org/licenses/noncommercial/1.0.0"
+CONTACT_EMAIL = "devilyumeko42@gmail.com"
+
 
 def _launcher_icon_path():
     """ Шлях до того самого assets/launcher.ico, що й іконка головного
@@ -83,6 +93,7 @@ def show_about_window(master):
         (t("info.about_field_internal_name"), VERSION_INFO["internal_name"]),
         (t("info.about_field_filename"), VERSION_INFO["original_filename"]),
         (t("info.about_field_developer"), VERSION_INFO["developer"]),
+        (t("info.about_field_license"), LICENSE_NAME),
     ]
 
     for i, (label_text, value_text) in enumerate(fields):
@@ -104,6 +115,48 @@ def show_about_window(master):
             text_color=["#003F6C", "#E5E9F0"],
         )
         val_lbl.pack(side="left", fill="x", expand=True)
+
+    # --- Ліцензія (клікабельне посилання на повний текст) ---
+    license_link_lbl = ctk.CTkLabel(
+        container,
+        text=t("info.about_license_link_text"),
+        font=(None, 11, "underline"),
+        text_color=["#0066cc", "#4da6ff"],
+        cursor="hand2",
+    )
+    license_link_lbl.pack(anchor="w", pady=(14, 0))
+    license_link_lbl.bind("<Button-1>", lambda e: webbrowser.open(LICENSE_URL))
+    license_link_lbl.bind(
+        "<Enter>", lambda e: license_link_lbl.configure(text_color=["#004499", "#99ccff"])
+    )
+    license_link_lbl.bind(
+        "<Leave>", lambda e: license_link_lbl.configure(text_color=["#0066cc", "#4da6ff"])
+    )
+
+    # --- Контакт для пропозицій / питань (клікабельний mailto) ---
+    contact_row = ctk.CTkFrame(container, fg_color="transparent")
+    contact_row.pack(anchor="w", pady=(6, 0), fill="x")
+
+    contact_text_lbl = ctk.CTkLabel(
+        contact_row, text=t("info.about_contact_text"), font=(None, 11), text_color="gray"
+    )
+    contact_text_lbl.pack(side="left")
+
+    contact_email_lbl = ctk.CTkLabel(
+        contact_row,
+        text=CONTACT_EMAIL,
+        font=(None, 11, "underline"),
+        text_color=["#0066cc", "#4da6ff"],
+        cursor="hand2",
+    )
+    contact_email_lbl.pack(side="left", padx=(4, 0))
+    contact_email_lbl.bind("<Button-1>", lambda e: webbrowser.open(f"mailto:{CONTACT_EMAIL}"))
+    contact_email_lbl.bind(
+        "<Enter>", lambda e: contact_email_lbl.configure(text_color=["#004499", "#99ccff"])
+    )
+    contact_email_lbl.bind(
+        "<Leave>", lambda e: contact_email_lbl.configure(text_color=["#0066cc", "#4da6ff"])
+    )
 
     copyright_lbl = ctk.CTkLabel(
         container, text=VERSION_INFO["copyright"], font=(None, 10), text_color="gray"
