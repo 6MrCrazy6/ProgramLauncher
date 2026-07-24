@@ -226,5 +226,7 @@
     "info.step9_link_text": "🔗 Open CTkThemesPack on GitHub",
     "info.step9_part2": "Simply import the downloaded theme .json file using the '📁 Import .json' button on the Settings tab.",
     "info.version_label": "Version: {version}",
-    "info.author_label": "Developer: {author}"
+    "info.author_label": "Developer: {author}",
+    "info.version_details_unavailable_title": "Unavailable",
+    "info.version_details_unavailable_text": "File properties are only available in the built .exe.\nThis information can't be shown when running through Python."
 }

@@ -1,5 +1,8 @@
+import sys
+import ctypes
 import customtkinter as ctk
 import webbrowser
+from tkinter import messagebox
 
 from locale_manager import t
 
@@ -72,12 +75,56 @@ class InfoManager(ctk.CTkFrame):
 
         version_label = ctk.CTkLabel(footer_frame, text=t("info.version_label", version=APP_VERSION), font=(None, 11),
                                      text_color="gray")
-        version_label.pack(side="left", padx=10)
+        version_label.pack(side="left", padx=(10, 4))
+
+        # Кнопка "..." — відкриває рідне вікно властивостей Windows для
+        # самого .exe (вкладка "Подробиці"), де видно реальні метадані,
+        # зашиті через version_info.txt при збірці PyInstaller (версія
+        # файлу, продукту, копірайт тощо) — а не просто текст, написаний
+        # вручну в цьому вікні.
+        details_btn = ctk.CTkButton(
+            footer_frame,
+            text="...",
+            width=28,
+            height=22,
+            font=(None, 11),
+            fg_color="transparent",
+            border_width=1,
+            text_color="gray",
+            command=self.show_version_details,
+        )
+        details_btn.pack(side="left", padx=(0, 10))
 
         # Ім'я розробника залишено оригінальним за вашим запитом
         author_label = ctk.CTkLabel(footer_frame, text=t("info.author_label", author=APP_AUTHOR), font=(None, 11),
                                     text_color="gray")
         author_label.pack(side="right", padx=10)
+
+    def show_version_details(self):
+        """ Відкриває рідне вікно властивостей Windows для .exe лаунчера
+        (вкладка "Подробиці"/"Details") — там показані реальні метадані,
+        зашиті через version_info.txt при збірці (версія файлу й
+        продукту, опис, копірайт, оригінальна назва файлу тощо).
+
+        Працює лише в зібраному .exe (sys.frozen), бо в режимі розробки
+        sys.executable вказує на python.exe, а не на сам лаунчер — і
+        показувати властивості python.exe було б безглуздо. """
+        if not getattr(sys, "frozen", False):
+            messagebox.showinfo(
+                t("info.version_details_unavailable_title"),
+                t("info.version_details_unavailable_text"),
+            )
+            return
+        try:
+            # ShellExecuteW з дієсловом "properties" — це системний виклик,
+            # який відкриває саме те вікно, що й правий клік по файлу в
+            # Провіднику -> "Властивості".
+            ctypes.windll.shell32.ShellExecuteW(None, "properties", sys.executable, None, None, 1)
+        except Exception:
+            messagebox.showinfo(
+                t("info.version_details_unavailable_title"),
+                t("info.version_details_unavailable_text"),
+            )
 
     def add_step(self, master, title, text):
         """ Шаблон для створення звичайного текстового кроку """

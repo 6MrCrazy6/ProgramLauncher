@@ -22,7 +22,7 @@ locales/en.json. Якщо файл мови відсутній чи пошкод
     ctk.CTkLabel(parent, text=t("settings.theme_label"))
 
 Якщо для ключа немає перекладу в обраній мові — підстраховуємось
-українською (мова за замовчуванням), а якщо немає і там — повертаємо
+англійською (мова за замовчуванням), а якщо немає і там — повертаємо
 сам ключ, щоб інтерфейс не падав через відсутній рядок.
 """
 
@@ -31,7 +31,7 @@ import json
 
 from app_paths import locales_path, saves_path
 
-DEFAULT_LANGUAGE = "uk"
+DEFAULT_LANGUAGE = "en"
 
 AVAILABLE_LANGUAGES = {
     "uk": "Українська",
@@ -318,6 +318,8 @@ DEFAULT_STRINGS = {
 
         "info.version_label": "Версія: {version}",
         "info.author_label": "Розробник: {author}",
+        "info.version_details_unavailable_title": "Недоступно",
+        "info.version_details_unavailable_text": "Властивості файлу доступні лише в зібраному .exe.\nПри запуску через Python цю інформацію показати неможливо.",
     },
     "en": {
         # --- Main window: tab switcher ---
@@ -594,6 +596,8 @@ DEFAULT_STRINGS = {
 
         "info.version_label": "Version: {version}",
         "info.author_label": "Developer: {author}",
+        "info.version_details_unavailable_title": "Unavailable",
+        "info.version_details_unavailable_text": "File properties are only available in the built .exe.\nThis information can't be shown when running through Python.",
     },
 }
 
@@ -681,7 +685,7 @@ def set_language(lang):
 def t(key, **kwargs):
     """ Повертає переклад рядка інтерфейсу за ключем поточною мовою.
     Підстраховки, якщо ключа немає:
-      1. пробуємо DEFAULT_LANGUAGE (українську);
+      1. пробуємо DEFAULT_LANGUAGE (англійську);
       2. якщо й там немає — повертаємо сам ключ, щоб інтерфейс не впав
          через відсутній чи забутий переклад.
     kwargs підставляються у рядок через str.format(), напр.:
