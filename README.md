@@ -1,6 +1,6 @@
 # Program Launcher 🚀
 
-A professional-grade Windows automation utility designed to streamline your daily workflow. Organize your software, automate launches, and track your productivity with ease.
+A professional-grade Windows automation utility designed to streamline your daily workflow. Organize your software, automate launches, and track your productivity with ease. Now with full multi-language support!
 
 ---
 
@@ -12,22 +12,22 @@ A professional-grade Windows automation utility designed to streamline your dail
 *   **Global Hotkeys:** Summon the launcher or trigger specific presets with customizable system-wide shortcuts (e.g., `Ctrl+Alt+L`).
 *   **Advanced Scheduler:** Non-blocking background scheduler to run apps or presets at specific times and day ranges.
 
-### 📂 Organization & Workflow
+### 🌍 Localization & UX
+*   **Multi-language Support:** Easily switch between **English** and **Ukrainian**. The system is built on a modular JSON-based locale engine.
+*   **Modern UI:** Built with `CustomTkinter` for a sleek, high-DPI aware interface with custom icons.
 *   **Category System:** Group apps into tags like "Work", "Dev", or "Gaming". Filter your list instantly to find what you need.
-*   **Smart Presets (Bundles):** Launch entire environments with one click. Presets inherit arguments and categories from your main list.
-*   **Launch Arguments:** Full support for command-line parameters (e.g., specific URLs for browsers or startup flags for games).
 *   **Native Drag & Drop:** Add apps by simply dragging `.exe`, `.lnk`, `.bat`, or `.cmd` files into the window.
 
-### 🎨 Customization & UX
-*   **Modern UI:** Built with `CustomTkinter` for a sleek, high-DPI aware interface.
-*   **Theme Engine:** Switch between Light and Dark modes, or create your own with the JSON theme constructor.
-*   **System Tray Integration:** Runs quietly in the background; access everything from the tray icon.
-*   **Windows Autostart:** Seamlessly integrates with Windows startup for a ready-to-work experience.
+### 📦 Smart Presets (Bundles)
+*   **Custom Bundles:** Launch entire environments with one click. Presets inherit arguments and categories from your main list.
+*   **Launch Arguments:** Full support for command-line parameters (e.g., specific URLs for browsers or startup flags for games).
+*   **Startup Presets:** Choose a specific preset to run automatically when the launcher starts.
 
-### 🛡️ Reliability & Portability
-*   **Portable Design:** No installation required. All settings, presets, and themes are stored in the application folder.
-*   **Backup System:** Export your entire configuration (settings, themes, presets) to a ZIP archive and restore it anytime.
-*   **Thread-Safe Logic:** Heavy operations like launching presets or checking schedules run in background threads to keep the UI responsive.
+### 🎨 Customization & Reliability
+*   **Theme Engine:** Switch between Light and Dark modes, or create your own with the built-in JSON theme constructor.
+*   **System Tray Integration:** Runs quietly in the background; access everything from the tray icon.
+*   **Portable Design:** No installation required. All settings, locales, and themes are stored in the application folder.
+*   **Backup System:** Export your entire configuration to a ZIP archive and restore it anytime.
 
 ---
 
@@ -63,6 +63,7 @@ python ProgramLauncherStart.py
 
 ## 📂 Project Structure
 *   `ProgramLauncherStart.py`: Main entry point and UI orchestration.
+*   `locale_manager.py`: Multi-language engine and string management.
 *   `process_utils.py`: Smart launch and process management logic.
 *   `hotkey_manager.py`: Global hotkey registration and handling.
 *   `stats_manager.py`: Usage tracking and analytics.
