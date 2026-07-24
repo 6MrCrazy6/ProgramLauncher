@@ -86,15 +86,52 @@ If you want to run the source code or contribute:
 ---
 
 ## 📂 Project Structure
-*   `ProgramLauncherStart.py`: Main entry point and UI orchestration.
-*   `locale_manager.py`: Multi-language engine and string management.
-*   `process_utils.py`: Smart launch and process management logic.
-*   `hotkey_manager.py`: Global hotkey registration and handling.
-*   `stats_manager.py`: Usage tracking and analytics.
-*   `preset_manager.py`: Logic for program bundles and categories.
-*   `schedule_manager.py`: Background scheduling engine.
-*   `settings_manager.py`: Themes, backups, and system settings.
-*   `app_paths.py`: Portable path resolution.
+
+```text
+ProgramLauncher/
+├── assets/
+│   ├── launcher.ico
+│   ├── launcher_64x64.png
+│   ├── launcher_128x128.png
+│   └── launcher_256x256.png
+├── locales/
+│   ├── en.json
+│   └── uk.json
+├── screenshots/
+│   ├── main.png
+│   ├── presets.png
+│   ├── scheduler.png
+│   └── settings.png
+├── ProgramLauncherStart.py
+├── locale_manager.py
+├── process_utils.py
+├── hotkey_manager.py
+├── stats_manager.py
+├── preset_manager.py
+├── schedule_manager.py
+├── settings_manager.py
+├── app_paths.py
+├── info_manager.py
+├── requirements.txt
+└── LICENSE
+```
+
+*   **README.md**: This file.
+*   **LICENSE**: The PolyForm Noncommercial License file.
+*   **assets/**: Contains application icons in various sizes and formats.
+*   **locales/**: Contains JSON files for interface localization (English and Ukrainian).
+*   **screenshots/**: Visual assets for the GitHub repository page.
+*   **ProgramLauncherStart.py**: The main application file with the graphical interface.
+*   **locale_manager.py**: Core logic for multi-language support and string management.
+*   **process_utils.py**: Smart launch logic, process monitoring, and argument handling.
+*   **hotkey_manager.py**: Handles global system-wide hotkey registration and execution.
+*   **stats_manager.py**: Tracks and manages program launch statistics.
+*   **preset_manager.py**: Manages program bundles (presets) and category logic.
+*   **schedule_manager.py**: Background engine for scheduled task execution.
+*   **settings_manager.py**: Handles themes, backups, and general application settings.
+*   **app_paths.py**: Manages portable path resolution for assets and data.
+*   **info_manager.py**: Logic for the "About" window and documentation.
+*   **requirements.txt**: List of all required Python libraries.
 
 ---
 
