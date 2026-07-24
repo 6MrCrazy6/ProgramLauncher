@@ -165,7 +165,7 @@ app.geometry("520x720")
 app.minsize(480, 620)
 
 try:
-    app.iconbitmap(resource_path(os.path.join("Icons", "launcher.ico")))
+    app.iconbitmap(resource_path(os.path.join("assets", "launcher.ico")))
 except Exception:
     # Немає файлу іконки, або .ico некоректний — тихо лишаємо іконку
     # за замовчуванням, це не критично для роботи програми
@@ -184,7 +184,7 @@ def create_tray_image():
     кадр). Якщо файл не знайдено чи він пошкоджений — тихо повертаємось
     до простого намальованого квадрата, щоб трей не зламався. """
     try:
-        return Image.open(resource_path(os.path.join("Icons", "launcher.ico")))
+        return Image.open(resource_path(os.path.join("assets", "launcher.ico")))
     except Exception:
         image = Image.new('RGB', (64, 64), color=(0, 46, 93))
         dc = ImageDraw.Draw(image)
