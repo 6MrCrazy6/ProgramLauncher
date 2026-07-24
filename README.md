@@ -4,6 +4,17 @@ A professional-grade Windows automation utility designed to streamline your dail
 
 ---
 
+## 📑 Table of Contents
+*   [Key Features](#-key-features)
+*   [Screenshots](#-screenshots)
+*   [Tech Stack](#-tech-stack)
+*   [Getting Started](#-getting-started)
+*   [Project Structure](#-project-structure)
+*   [Author](#-author)
+*   [License](#-license)
+
+---
+
 ## ✨ Key Features
 
 ### 🧠 Intelligence & Automation
