@@ -663,6 +663,15 @@ class SettingsManager(ctk.CTkFrame):
 
         self.ensure_base_theme_exists()
         self.create_widgets()
+        # ВАЖЛИВО: примусово "домальовуємо" щойно створені віджети ПЕРЕД
+        # тим, як застосовувати збережені значення. Без цього CTkSlider
+        # (delay_slider) ще не знає своєї реальної ширини (pack() ще не
+        # прорахований Tkinter'ом) — і .set() у load_and_apply_saved_widgets()
+        # малює повзунок приблизно посередині шкали (0-10 -> ~5), хоча
+        # число під ним показує правильне значення (напр. "0 сек."). Той
+        # самий трюк актуальний для будь-якого CTkSlider, якому значення
+        # виставляється одразу після створення, до першого reflow вікна.
+        self.update_idletasks()
         # Якщо лаунчер вже в автозапуску, але його перемістили/оновили —
         # актуалізуємо шлях у реєстрі ДО того, як зчитаємо стан чекбоксів,
         # щоб автозапуск не "мовчки" ламався через застарілий шлях.
@@ -1350,6 +1359,16 @@ class SettingsManager(ctk.CTkFrame):
             self.language_dropdown.set(self._lang_codes_by_name[locale_manager.DEFAULT_LANGUAGE])
             self.tray_checkbox.select()
             self.smart_launch_checkbox.select()
+            # ВАЖЛИВО: без явного .set() CTkSlider сам малює ручку
+            # посередині шкали (тут: 0-10 -> позиція 5), а НЕ на 0, як
+            # можна було б очікувати. Це не мало значення для підпису
+            # (delay_label вже створений з текстом "0 сек." в create_widgets),
+            # але сам повзунок візуально "тікав" на середину шкали при
+            # першому запуску, поки не існує settings.json — саме це і
+            # було причиною бага "показує 0, а повзунок стоїть на 5".
+            default_delay = self.default_settings["delay"]
+            self.delay_slider.set(default_delay)
+            self.delay_label.configure(text=t("settings.delay_label", seconds=default_delay))
             if self.is_windows_autostart_active():
                 self.autostart_checkbox.select()
 
