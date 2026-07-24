@@ -31,6 +31,22 @@ A professional-grade Windows automation utility designed to streamline your dail
 
 ---
 
+## 📸 Screenshots
+
+### Main Window & Categories
+![Main Window](screenshots/main.png)
+
+### Preset Management
+![Presets](screenshots/presets.png)
+
+### Advanced Scheduler
+![Scheduler](screenshots/scheduler.png)
+
+### Settings & Customization
+![Settings](screenshots/settings.png)
+
+---
+
 ## 🛠 Tech Stack
 *   **Python 3.11+**
 *   **CustomTkinter:** Modern UI framework.
