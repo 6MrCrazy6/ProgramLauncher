@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw
 # Імпортуємо всі менеджери з окремих файлів
 from preset_manager import PresetManager
 from settings_manager import SettingsManager
-from info_manager import InfoManager
+from info_manager import InfoManager, create_corner_menu_button
 from schedule_manager import ScheduleManager
 
 # "Розумний запуск": не відкривати програму повторно, якщо вона вже працює
@@ -161,8 +161,13 @@ def resource_path(relative_path):
 
 app = ctk.CTk()
 app.title("Program Launcher")
-app.geometry("520x720")
-app.minsize(480, 620)
+app.geometry("560x720")
+app.minsize(520, 620)
+# Явно дозволяємо вільно змінювати розмір вікна в обидва боки — весь
+# інтерфейс (top_row, mode_toggle, program_frame тощо) зібраний через
+# pack(fill=..., expand=True), тож коректно розтягується/стискається
+# при будь-якому розмірі вікна чи екрана.
+app.resizable(True, True)
 
 try:
     app.iconbitmap(resource_path(os.path.join("assets", "launcher.ico")))
@@ -262,19 +267,48 @@ def exit_program():
 
 # --- ФУНКЦІЯ ПЕРЕЗАПУСКУ ПРОГРАМИ (ПРАЦЮЄ В .EXE) ---
 def restart_program():
+    """ Порядок дій тут навмисно інший, ніж у exit_program(): спочатку
+    ховаємо вікно і одразу стартуємо НОВИЙ процес, і лише ПІСЛЯ цього
+    прибираємо за старим (трей, хоткеї, потік розкладу). Якщо зробити
+    навпаки (спершу дочекатись зупинки трея/хоткеїв і лише тоді
+    запускати новий .exe) — новий процес довго й повільно ініціалізує
+    свій CTk-інтерфейс (теми, локаль, віджети) ПІСЛЯ того, як стара
+    копія вже витратила час на власне прибирання, тобто дві повільні
+    речі йдуть одна за одною замість паралельно. Тут вони йдуть
+    одночасно, і вікно ховається миттєво — тому перезапуск відчувається
+    швидшим, хоча сумарний обсяг роботи не змінився. """
     global tray_icon
+
+    # Миттєва візуальна реакція на "Так" в діалозі підтвердження —
+    # користувач одразу бачить, що щось відбувається, а не бачить
+    # старе вікно, що "зависло" на секунду-дві.
+    try:
+        app.withdraw()
+    except Exception:
+        pass
+
+    if getattr(sys, 'frozen', False):
+        # Білд (.exe): запускаємо нову копію одразу, паралельно з
+        # прибиранням старої нижче.
+        os.startfile(sys.executable)
+    else:
+        # Звичайний .py-скрипт: execl підміняє поточний процес одразу
+        # на місці (код нижче для цієї гілки вже не виконається — це
+        # нормально, ОС сама звільнить хендли/треди разом зі старим
+        # образом процесу).
+        os.execl(sys.executable, sys.executable, *sys.argv)
+
+    # Прибирання старої копії — вже не впливає на швидкість появи
+    # нового вікна користувачу, тож порядок і час виконання тут не
+    # критичні.
+    try:
+        schedule_manager_frame.stop_checking_loop()
+    except Exception:
+        pass
     if tray_icon:
         tray_icon.stop()
     hotkey_mgr.stop()
     app.quit()
-
-    # Визначаємо, чи запущено як скрипт чи як скомпільований .exe
-    if getattr(sys, 'frozen', False):
-        # Якщо це білд (.exe)
-        os.startfile(sys.executable)
-    else:
-        # Якщо це звичайний .py скрипт
-        os.execl(sys.executable, sys.executable, *sys.argv)
     sys.exit(0)
 
 
@@ -320,13 +354,23 @@ def toggle_interface(value):
         info_manager_frame.pack(pady=5, padx=20, fill="both", expand=True)
 
 
+# Один рядок: зліва кнопка "⋮" (інфо-меню — наразі лише "Про програму"
+# з даними з version_info.txt), праворуч від неї — перемикач вкладок,
+# що займає весь залишок ширини. Обидва в одному рядку "pady=15" —
+# нічого нижче через це не зсувається, і кнопка завжди лишається точно
+# зліва від "Програми" незалежно від ширини вікна.
+top_row = ctk.CTkFrame(app, fg_color="transparent")
+top_row.pack(pady=15, padx=(10, 15), fill="x")
+
+create_corner_menu_button(top_row, root=app)
+
 mode_toggle = ctk.CTkSegmentedButton(
-    app,
+    top_row,
     values=[t("main.tab_programs"), t("main.tab_presets"), t("main.tab_schedule"),
             t("main.tab_settings"), t("main.tab_info")],
     command=toggle_interface
 )
-mode_toggle.pack(pady=15, padx=15, fill="x")
+mode_toggle.pack(side="left", fill="x", expand=True)
 mode_toggle.set(t("main.tab_programs"))
 
 main_ui_frame = ctk.CTkFrame(app, fg_color="transparent")
@@ -766,14 +810,14 @@ def check_and_run_autostart():
         try:
             delay = 0
             close_after = False
-            smart_launch = False
+            smart_launch = True
 
             if os.path.exists(settings_file):
                 with open(settings_file, "r", encoding="utf-8") as sf:
                     st = json.load(sf)
                     delay = st.get("delay", 0)
                     close_after = st.get("close_after_launch", False)
-                    smart_launch = st.get("smart_launch", False)
+                    smart_launch = st.get("smart_launch", True)
 
             with open(presets_file, "r", encoding="utf-8") as file:
                 presets = json.load(file)
@@ -826,7 +870,7 @@ def launch_selected():
 
     delay = 0
     close_after = False
-    smart_launch = False
+    smart_launch = True
 
     if os.path.exists(settings_file):
         try:
@@ -834,7 +878,7 @@ def launch_selected():
                 st = json.load(f)
                 delay = st.get("delay", 0)
                 close_after = st.get("close_after_launch", False)
-                smart_launch = st.get("smart_launch", False)
+                smart_launch = st.get("smart_launch", True)
         except:
             pass
 

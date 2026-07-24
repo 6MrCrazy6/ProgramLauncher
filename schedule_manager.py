@@ -356,14 +356,14 @@ class ScheduleManager(ctk.CTkFrame):
         settings_file = os.path.join(self.base_dir, "jsons_saves", "settings.json")
         delay = 0
         close_after = False
-        smart_launch = False
+        smart_launch = True
         if os.path.exists(settings_file):
             try:
                 with open(settings_file, "r", encoding="utf-8") as sf:
                     st = json.load(sf)
                     delay = st.get("delay", 0)
                     close_after = st.get("close_after_launch", False)
-                    smart_launch = st.get("smart_launch", False)
+                    smart_launch = st.get("smart_launch", True)
             except:
                 pass
 

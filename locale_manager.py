@@ -320,6 +320,18 @@ DEFAULT_STRINGS = {
         "info.author_label": "Розробник: {author}",
         "info.version_details_unavailable_title": "Недоступно",
         "info.version_details_unavailable_text": "Властивості файлу доступні лише в зібраному .exe.\nПри запуску через Python цю інформацію показати неможливо.",
+
+        # --- Кутова кнопка "..." (глобальне меню) ---
+        "info.corner_menu_about_item": "ℹ️ Про програму",
+        "info.about_window_title": "Про програму",
+        "info.about_field_product": "Назва продукту",
+        "info.about_field_description": "Опис",
+        "info.about_field_version": "Версія",
+        "info.about_field_internal_name": "Внутрішня назва",
+        "info.about_field_filename": "Ім'я файлу",
+        "info.about_field_developer": "Розробник",
+        "info.about_field_copyright": "Авторське право",
+        "info.about_close_btn": "Закрити",
     },
     "en": {
         # --- Main window: tab switcher ---
@@ -598,6 +610,18 @@ DEFAULT_STRINGS = {
         "info.author_label": "Developer: {author}",
         "info.version_details_unavailable_title": "Unavailable",
         "info.version_details_unavailable_text": "File properties are only available in the built .exe.\nThis information can't be shown when running through Python.",
+
+        # --- Corner "..." button (global menu) ---
+        "info.corner_menu_about_item": "ℹ️ About the program",
+        "info.about_window_title": "About the Program",
+        "info.about_field_product": "Product Name",
+        "info.about_field_description": "Description",
+        "info.about_field_version": "Version",
+        "info.about_field_internal_name": "Internal Name",
+        "info.about_field_filename": "File Name",
+        "info.about_field_developer": "Developer",
+        "info.about_field_copyright": "Copyright",
+        "info.about_close_btn": "Close",
     },
 }
 

@@ -416,7 +416,7 @@ class PresetManager(ctk.CTkFrame):
         if os.path.exists(settings_file):
             try:
                 with open(settings_file, "r", encoding="utf-8") as f:
-                    return json.load(f).get("smart_launch", False)
+                    return json.load(f).get("smart_launch", True)
             except Exception:
                 pass
         return False

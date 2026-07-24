@@ -842,6 +842,13 @@ class SettingsManager(ctk.CTkFrame):
             command=self.save_settings
         )
         self.smart_launch_checkbox.pack(pady=(4, 0), padx=10, fill="x", anchor="w")
+        # За замовчуванням "Розумний запуск" увімкнено — і для нового
+        # користувача (ще немає settings.json), і одразу в момент
+        # створення чекбокса (щоб не було "миготіння" знятої галочки
+        # до виклику load_and_apply_saved_widgets). Якщо в реальному
+        # settings.json збережено інше значення — воно застосується
+        # трохи нижче, в load_and_apply_saved_widgets().
+        self.smart_launch_checkbox.select()
 
         smart_launch_hint = ctk.CTkLabel(
             self.behavior_box,
@@ -1197,7 +1204,17 @@ class SettingsManager(ctk.CTkFrame):
         self.save_settings()
 
     def change_color_theme(self, choice):
+        """ Колір/шрифт стилю, як і мова інтерфейсу, повністю застосовується
+        лише після перезапуску лаунчера (набір кольорів CTk фактично
+        читається CustomTkinter один раз при старті процесу) — тож тут
+        так само зберігаємо вибір і одразу пропонуємо перезапустити,
+        інакше нова тема реально підхопиться лише при наступному запуску. """
         self.save_settings()
+        if messagebox.askyesno(
+            t("settings.color_label"),
+            t("settings.restart_btn") + "?"
+        ):
+            self.restart_program()
 
     def change_language(self, choice):
         """ Мова інтерфейсу застосовується так само, як кольорова тема —
@@ -1315,7 +1332,7 @@ class SettingsManager(ctk.CTkFrame):
                 else:
                     self.autostart_checkbox.deselect()
 
-                if st.get("smart_launch", False):
+                if st.get("smart_launch", True):
                     self.smart_launch_checkbox.select()
                 else:
                     self.smart_launch_checkbox.deselect()
@@ -1332,6 +1349,7 @@ class SettingsManager(ctk.CTkFrame):
             self.color_dropdown.set("default_launcher")
             self.language_dropdown.set(self._lang_codes_by_name[locale_manager.DEFAULT_LANGUAGE])
             self.tray_checkbox.select()
+            self.smart_launch_checkbox.select()
             if self.is_windows_autostart_active():
                 self.autostart_checkbox.select()
 
