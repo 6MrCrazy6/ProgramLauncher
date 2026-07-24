@@ -43,6 +43,8 @@
     "main.delete_category_confirm_text": "Delete the «{category}» category?\n\nPrograms that had this category will become «No category».",
     "main.tray_open": "📱 Open launcher",
     "main.tray_exit": "❌ Exit completely",
+    "main.already_running_title": "Program Launcher",
+    "main.already_running_text": "The launcher is already running (or is still starting up).\n\nPlease wait — a second copy is not needed.",
     "settings.theme_label": "App visual theme:",
     "settings.color_label": "Color & font style (requires restart):",
     "settings.import_json": "📁 Import .json",

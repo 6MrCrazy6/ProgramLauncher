@@ -43,6 +43,8 @@
     "main.delete_category_confirm_text": "Видалити категорію «{category}»?\n\nПрограми, що мали цю категорію, стануть «Без категорії».",
     "main.tray_open": "📱 Відкрити лаунчер",
     "main.tray_exit": "❌ Повний вихід",
+    "main.already_running_title": "Program Launcher",
+    "main.already_running_text": "Лаунчер вже запущено (або він ще завантажується).\n\nБудь ласка, зачекайте — друга копія програми не потрібна.",
     "settings.theme_label": "Візуальна тема програми:",
     "settings.color_label": "Колір та шрифт стилю (потребує перезапуску):",
     "settings.import_json": "📁 Імпортувати .json",

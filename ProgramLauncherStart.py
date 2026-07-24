@@ -34,6 +34,35 @@ import hotkey_manager
 # SettingsManager (заголовок вікна, іконка трею тощо).
 from locale_manager import t
 
+# --- ЗАХИСТ ВІД ПОДВІЙНОГО ЗАПУСКУ ---
+# Якщо клацнути по .exe/ярлику двічі поспіль (або запустити ще раз,
+# поки перша копія вже працює чи ще завантажується) — друга копія
+# одразу завершується з нативним повідомленням Windows, замість того
+# щоб відкривати другий повноцінний лаунчер.
+#
+# Іменований мьютекс Windows — найнадійніший спосіб перевірити це:
+# перша копія процесу створює мьютекс з унікальною назвою; будь-яка
+# наступна спроба створити мьютекс з тією ж назвою одразу повертає
+# helper-код ERROR_ALREADY_EXISTS (183), навіть якщо перша копія ще
+# не встигла показати вікно (на відміну від перевірки "чи є вікно з
+# такою назвою", яка спрацює лише ПІСЛЯ появи вікна).
+#
+# Перевірка стоїть одразу після імпортів і ДО створення CTk-вікна —
+# тому друга копія закривається миттєво, не витрачаючи час на
+# ініціалізацію customtkinter (теми, шрифти, всі вкладки).
+_SINGLE_INSTANCE_MUTEX_NAME = "ProgramLauncher_SingleInstance_38f2b6c1"
+_ERROR_ALREADY_EXISTS = 183
+
+_single_instance_mutex = ctypes.windll.kernel32.CreateMutexW(None, False, _SINGLE_INSTANCE_MUTEX_NAME)
+if ctypes.windll.kernel32.GetLastError() == _ERROR_ALREADY_EXISTS:
+    ctypes.windll.user32.MessageBoxW(
+        None,
+        t("main.already_running_text"),
+        t("main.already_running_title"),
+        0x40,  # MB_ICONINFORMATION
+    )
+    sys.exit(0)
+
 # --- НАЛАШТУВАННЯ CTYPES ДЛЯ DRAG & DROP НА WINDOWS ---
 # Зберігаємо глобальне посилання на callback-функцію, щоб її не видалив GC (Garbage Collector)
 _global_wndproc_ref = None
@@ -284,6 +313,15 @@ def restart_program():
     # старе вікно, що "зависло" на секунду-дві.
     try:
         app.withdraw()
+    except Exception:
+        pass
+
+    # Явно звільняємо мьютекс однократного запуску ПЕРЕД стартом нової
+    # копії — інакше нова копія побачить, що мьютекс ще "зайнятий"
+    # старою копією (яка в цей момент ще завершує прибирання нижче),
+    # і помилково вирішить, що лаунчер вже запущено.
+    try:
+        ctypes.windll.kernel32.CloseHandle(_single_instance_mutex)
     except Exception:
         pass
 
