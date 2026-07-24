@@ -43,21 +43,29 @@ A professional-grade Windows automation utility designed to streamline your dail
 
 ## 📥 Getting Started
 
-### 1. Clone the repository
-```bash
-git clone https://github.com/6MrCrazy6/ProgramLauncher.git
-cd ProgramLauncher
-```
+### 🚀 Option 1: For Users (Easiest)
+If you just want to use the application, download the latest standalone `.exe` version from the **[Releases](https://github.com/6MrCrazy6/ProgramLauncher/releases)** page. 
+*   No installation or Python required.
+*   Just download and run!
 
-### 2. Install dependencies
-```bash
-pip install -r requirements.txt
-```
+### 💻 Option 2: For Developers
+If you want to run the source code or contribute:
 
-### 3. Run the application
-```bash
-python ProgramLauncherStart.py
-```
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/6MrCrazy6/ProgramLauncher.git
+   cd ProgramLauncher
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Run the application:**
+   ```bash
+   python ProgramLauncherStart.py
+   ```
 
 ---
 
