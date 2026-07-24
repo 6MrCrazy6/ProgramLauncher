@@ -4,13 +4,18 @@ import os
 import json
 import subprocess  # Модуль для надсилання нативних системних команд закриття процесів
 from process_utils import smart_startfile, resolve_program_entry
+from locale_manager import t
 
 
 class PresetManager(ctk.CTkFrame):
     # Ті ж самі значення, що і на головному екрані ("Програми"), щоб
-    # категорії та їх позначення виглядали й поводились однаково
-    CATEGORY_ALL = "Всі"
-    CATEGORY_UNSET = "Без категорії"
+    # категорії та їх позначення виглядали й поводились однаково.
+    # Беремо переклад з тих самих ключів локалізації, що й головний
+    # екран ("main.category_all"/"main.category_unset") — інакше при
+    # зміні мови інтерфейсу фільтр категорій тут розсинхронізується
+    # з головною вкладкою "Програми".
+    CATEGORY_ALL = t("main.category_all")
+    CATEGORY_UNSET = t("main.category_unset")
 
     def __init__(self, master, on_hotkeys_changed=None, **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
@@ -57,13 +62,13 @@ class PresetManager(ctk.CTkFrame):
 
         ctk.CTkLabel(
             create_frame,
-            text="Створити новий набір програм",
+            text=t("presets.section_create_title"),
             font=("Arial", 13, "bold")
         ).pack(pady=5)
 
         self.preset_name_entry = ctk.CTkEntry(
             create_frame,
-            placeholder_text="Введіть назву (напр: Робота, Ігри)"
+            placeholder_text=t("presets.name_placeholder")
         )
         self.preset_name_entry.pack(
             pady=5,
@@ -77,7 +82,7 @@ class PresetManager(ctk.CTkFrame):
         category_filter_frame = ctk.CTkFrame(create_frame, fg_color="transparent")
         category_filter_frame.pack(pady=(0, 5), padx=10, fill="x")
 
-        ctk.CTkLabel(category_filter_frame, text="🏷 Категорія:").pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(category_filter_frame, text=t("main.category_label")).pack(side="left", padx=(0, 8))
 
         self.category_filter_dropdown = ctk.CTkOptionMenu(
             category_filter_frame,
@@ -100,7 +105,7 @@ class PresetManager(ctk.CTkFrame):
 
         btn_build = ctk.CTkButton(
             create_frame,
-            text="💾 Зберегти новий набір",
+            text=t("presets.save_new_btn"),
             command=self.save_new_preset
         )
         btn_build.pack(
@@ -121,13 +126,13 @@ class PresetManager(ctk.CTkFrame):
 
         ctk.CTkLabel(
             manage_frame,
-            text="Ваші збережені набори",
+            text=t("presets.section_manage_title"),
             font=("Arial", 13, "bold")
         ).pack(pady=5)
 
         self.preset_dropdown = ctk.CTkOptionMenu(
             manage_frame,
-            values=["Немає створених наборів"],
+            values=[t("presets.none_created")],
             command=self.on_preset_changed
         )
         self.preset_dropdown.pack(
@@ -143,7 +148,7 @@ class PresetManager(ctk.CTkFrame):
 
         self.autostart_checkbox = ctk.CTkCheckBox(
             manage_frame,
-            text="🚀 Стартовий набір: запускати цей набір одразу при відкритті лаунчера",
+            text=t("presets.autostart_checkbox"),
             command=self.toggle_preset_autostart
         )
         self.autostart_checkbox.pack(
@@ -166,7 +171,7 @@ class PresetManager(ctk.CTkFrame):
 
         self.btn_launch = ctk.CTkButton(
             actions_frame,
-            text="🚀 Запустити набір",
+            text=t("presets.launch_btn"),
             command=self.launch_current_preset
         )
         self.btn_launch.pack(
@@ -178,7 +183,7 @@ class PresetManager(ctk.CTkFrame):
 
         self.btn_stop = ctk.CTkButton(
             actions_frame,
-            text="⛔ Закрити набір",
+            text=t("presets.stop_btn"),
             command=self.close_current_preset
         )
         self.btn_stop.pack(
@@ -190,7 +195,7 @@ class PresetManager(ctk.CTkFrame):
 
         self.btn_delete = ctk.CTkButton(
             manage_frame,
-            text="❌ Видалити цей набір",
+            text=t("presets.delete_btn"),
             fg_color="transparent",
             border_width=1,
             text_color=("#001F3F", "#E5E9F0"),
@@ -261,9 +266,9 @@ class PresetManager(ctk.CTkFrame):
 
         if not visible_programs:
             text = (
-                "Немає жодної доданої програми на вкладці 'Програми'."
+                t("presets.empty_no_programs")
                 if not self.all_programs
-                else f"У категорії «{selected_category}» ще немає програм."
+                else t("main.empty_category", category=selected_category)
             )
             ctk.CTkLabel(self.scroll_programs, text=text, text_color="gray").pack(pady=15, padx=5)
             return
@@ -283,8 +288,8 @@ class PresetManager(ctk.CTkFrame):
 
     def save_new_preset(self):
         name = self.preset_name_entry.get().strip()
-        if not name or name == "Немає створених наборів":
-            messagebox.showwarning("Помилка", "Введіть коректну назву для набору!")
+        if not name or name == t("presets.none_created"):
+            messagebox.showwarning(t("settings.error_title"), t("presets.error_invalid_name"))
             return
 
         # Враховуємо вибір і серед програм, прихованих поточним фільтром
@@ -299,7 +304,7 @@ class PresetManager(ctk.CTkFrame):
                 selected_entries.append({"path": prog["path"], "args": prog.get("args", "")})
 
         if not selected_entries:
-            messagebox.showwarning("Помилка", "Оберіть хоча б одну програму для набору!")
+            messagebox.showwarning(t("settings.error_title"), t("presets.error_no_programs"))
             return
 
         self.presets[name] = {"programs": selected_entries}
@@ -313,7 +318,7 @@ class PresetManager(ctk.CTkFrame):
 
         self.update_dropdown()
         self.preset_dropdown.set(name)
-        messagebox.showinfo("Успіх", f"Набір '{name}' успішно створено!")
+        messagebox.showinfo(t("presets.success_title"), t("presets.success_created", name=name))
 
     def update_dropdown(self):
         names = list(self.presets.keys())
@@ -322,8 +327,8 @@ class PresetManager(ctk.CTkFrame):
             if self.preset_dropdown.get() not in names:
                 self.preset_dropdown.set(names[0])
         else:
-            self.preset_dropdown.configure(values=["Немає створених наборів"])
-            self.preset_dropdown.set("Немає створених наборів")
+            self.preset_dropdown.configure(values=[t("presets.none_created")])
+            self.preset_dropdown.set(t("presets.none_created"))
 
         self.refresh_autostart_checkbox_state()
 
@@ -369,7 +374,7 @@ class PresetManager(ctk.CTkFrame):
         """ Синхронізує стан чекбокса автозапуску з даними обраного пресету """
         selected = self.preset_dropdown.get()
 
-        if not selected or selected == "Немає створених наборів" or selected not in self.presets:
+        if not selected or selected == t("presets.none_created") or selected not in self.presets:
             self.autostart_checkbox.deselect()
             self.autostart_checkbox.configure(state="disabled")
             return
@@ -388,7 +393,7 @@ class PresetManager(ctk.CTkFrame):
         пресет, тому при увімкненні знімаємо прапорець з усіх інших. """
         selected = self.preset_dropdown.get()
 
-        if not selected or selected == "Немає створених наборів" or selected not in self.presets:
+        if not selected or selected == t("presets.none_created") or selected not in self.presets:
             self.autostart_checkbox.deselect()
             return
 
@@ -418,7 +423,7 @@ class PresetManager(ctk.CTkFrame):
 
     def launch_current_preset(self):
         selected = self.preset_dropdown.get()
-        if selected == "Немає створених наборів": return
+        if selected == t("presets.none_created"): return
         self.launch_preset_by_name(selected)
 
     def launch_preset_by_name(self, name):
@@ -437,7 +442,7 @@ class PresetManager(ctk.CTkFrame):
     def close_current_preset(self):
         """ Примусове завершення процесів усіх програм поточного пресету """
         selected = self.preset_dropdown.get()
-        if selected == "Немає створених наборів": return
+        if selected == t("presets.none_created"): return
 
         preset = self.presets.get(selected)
         if not preset or "programs" not in preset: return
@@ -464,10 +469,10 @@ class PresetManager(ctk.CTkFrame):
             selected_preset = selected_preset[0] if len(selected_preset) > 0 else ""
         selected_preset = str(selected_preset).strip()
 
-        if not selected_preset or selected_preset == "Немає створених наборів":
+        if not selected_preset or selected_preset == t("presets.none_created"):
             return
 
-        if messagebox.askyesno("Видалення", f"Ви впевнені, що хочете видалити набір '{selected_preset}'?"):
+        if messagebox.askyesno(t("presets.delete_confirm_title"), t("presets.delete_confirm_text", name=selected_preset)):
             if selected_preset in self.presets:
                 del self.presets[selected_preset]
 
@@ -484,7 +489,7 @@ class PresetManager(ctk.CTkFrame):
                 new_selected = new_selected[0] if len(new_selected) > 0 else ""
             new_selected = str(new_selected).strip()
 
-            if new_selected and new_selected != "Немає створених наборів":
+            if new_selected and new_selected != t("presets.none_created"):
                 try:
                     self.on_preset_changed(new_selected)
                 except:

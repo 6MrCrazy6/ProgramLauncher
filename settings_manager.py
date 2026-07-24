@@ -11,12 +11,21 @@ import winreg  # Модуль для роботи з автозапуском Wi
 import subprocess
 import hotkey_manager
 import stats_manager
+import locale_manager
+from locale_manager import t
 
 
 class ThemeCreatorWindow(ctk.CTkToplevel):
+    # Канонічні (мовонезалежні) ключі елементів, що редагуються, і режимів
+    # застосування кольору. self.colors тримає дані під цими ключами,
+    # а в UI показуються переклади (target_labels/mode_labels) — так само,
+    # як і з днями тижня в розкладі.
+    TARGET_KEYS = ["buttons", "window_bg", "frames_bg", "entries", "checks_switches", "text"]
+    MODE_KEYS = ["both", "dark_only", "light_only"]
+
     def __init__(self, parent, on_save_callback):
         super().__init__(parent)
-        self.title("Гнучкий конструктор теми")
+        self.title(t("theme_creator.window_title"))
         self.geometry("480x820")
         self.minsize(400, 500)
         self.resizable(True, True)
@@ -26,16 +35,24 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
 
         self.on_save_callback = on_save_callback
 
+        self.target_labels = [t(f"theme_creator.target_{key}") for key in self.TARGET_KEYS]
+        self.target_label_to_key = dict(zip(self.target_labels, self.TARGET_KEYS))
+        self.target_key_to_label = dict(zip(self.TARGET_KEYS, self.target_labels))
+
+        self.mode_labels = [t(f"theme_creator.mode_{key}") for key in self.MODE_KEYS]
+        self.mode_label_to_key = dict(zip(self.mode_labels, self.MODE_KEYS))
+        self.mode_key_both = self.mode_labels[0]
+
         self.colors = {
-            "Кнопки": {"main": (0, 46, 93), "hover": (0, 64, 128)},
-            "Фон вікна": {"main": (0, 31, 63)},
-            "Фон фреймів": {"main": (67, 78, 90)},
-            "Текстові поля": {"main": (0, 43, 91)},
-            "Чекбокси/Світчі": {"main": (0, 46, 93)},
-            "Текст": {"main": (229, 233, 240)}
+            "buttons": {"main": (0, 46, 93), "hover": (0, 64, 128)},
+            "window_bg": {"main": (0, 31, 63)},
+            "frames_bg": {"main": (67, 78, 90)},
+            "entries": {"main": (0, 43, 91)},
+            "checks_switches": {"main": (0, 46, 93)},
+            "text": {"main": (229, 233, 240)}
         }
 
-        self.current_target = "Кнопки"
+        self.current_target = "buttons"
         self.create_widgets()
         self.update_preview()
 
@@ -46,42 +63,42 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
         self.scroll_container = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self.scroll_container.pack(fill="both", expand=True)
 
-        ctk.CTkLabel(self.scroll_container, text="Назва теми (англійською):").pack(pady=(10, 2), padx=20, anchor="w")
-        self.name_entry = ctk.CTkEntry(self.scroll_container, placeholder_text="напр: mega_style")
+        ctk.CTkLabel(self.scroll_container, text=t("theme_creator.name_label")).pack(pady=(10, 2), padx=20, anchor="w")
+        self.name_entry = ctk.CTkEntry(self.scroll_container, placeholder_text=t("theme_creator.name_placeholder"))
         self.name_entry.pack(pady=5, padx=20, fill="x")
 
         self.preview_window = ctk.CTkFrame(self.scroll_container, border_width=1)
         self.preview_window.pack(pady=10, padx=20, fill="x")
-        ctk.CTkLabel(self.preview_window, text="Попередній перегляд:").pack(pady=2)
+        ctk.CTkLabel(self.preview_window, text=t("theme_creator.preview_label")).pack(pady=2)
 
         self.preview_frame = ctk.CTkFrame(self.preview_window)
         self.preview_frame.pack(pady=5, padx=15, fill="x")
 
-        self.preview_label = ctk.CTkLabel(self.preview_frame, text="Приклад текста (Label)")
+        self.preview_label = ctk.CTkLabel(self.preview_frame, text=t("theme_creator.preview_sample_label"))
         self.preview_label.pack(pady=2)
 
-        self.preview_entry = ctk.CTkEntry(self.preview_frame, placeholder_text="Поле введення...")
-        self.preview_entry.insert(0, "Текст у полі")
+        self.preview_entry = ctk.CTkEntry(self.preview_frame, placeholder_text=t("theme_creator.preview_entry_placeholder"))
+        self.preview_entry.insert(0, t("theme_creator.preview_entry_text"))
         self.preview_entry.pack(pady=2, padx=10, fill="x")
 
         preview_row = ctk.CTkFrame(self.preview_frame, fg_color="transparent")
         preview_row.pack(pady=2, fill="x", padx=10)
 
-        self.preview_checkbox = ctk.CTkCheckBox(preview_row, text="Чекбокс")
+        self.preview_checkbox = ctk.CTkCheckBox(preview_row, text=t("theme_creator.preview_checkbox"))
         self.preview_checkbox.select()
         self.preview_checkbox.pack(side="left", expand=True)
 
-        self.preview_switch = ctk.CTkSwitch(preview_row, text="Світч")
+        self.preview_switch = ctk.CTkSwitch(preview_row, text=t("theme_creator.preview_switch"))
         self.preview_switch.select()
         self.preview_switch.pack(side="right", expand=True)
 
-        self.btn_preview = ctk.CTkButton(self.preview_frame, text="Приклад кнопки")
+        self.btn_preview = ctk.CTkButton(self.preview_frame, text=t("theme_creator.preview_button"))
         self.btn_preview.pack(pady=6, padx=10)
 
         mode_frame = ctk.CTkFrame(self.scroll_container)
         mode_frame.pack(pady=5, padx=20, fill="x")
-        self.mode_selector = ctk.CTkSegmentedButton(mode_frame, values=["До обох", "Тільки Dark", "Тільки Light"])
-        self.mode_selector.set("До обох")
+        self.mode_selector = ctk.CTkSegmentedButton(mode_frame, values=self.mode_labels)
+        self.mode_selector.set(self.mode_key_both)
         self.mode_selector.pack(pady=5, padx=10, fill="x")
 
         font_frame = ctk.CTkFrame(self.scroll_container)
@@ -98,17 +115,17 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
 
         target_frame = ctk.CTkFrame(self.scroll_container)
         target_frame.pack(pady=5, padx=20, fill="x")
-        ctk.CTkLabel(target_frame, text="Оберіть елемент для редагування:").pack(pady=2, padx=10, anchor="w")
+        ctk.CTkLabel(target_frame, text=t("theme_creator.target_select_label")).pack(pady=2, padx=10, anchor="w")
 
-        self.target_selector = ctk.CTkOptionMenu(target_frame, values=list(self.colors.keys()),
+        self.target_selector = ctk.CTkOptionMenu(target_frame, values=self.target_labels,
                                                  command=self.on_target_changed)
-        self.target_selector.set("Кнопки")
+        self.target_selector.set(self.target_key_to_label["buttons"])
         self.target_selector.pack(pady=5, padx=10, fill="x")
 
         self.sliders_frame = ctk.CTkFrame(self.scroll_container)
         self.sliders_frame.pack(pady=5, padx=20, fill="x")
 
-        self.slider_title = ctk.CTkLabel(self.sliders_frame, text="Основний колір (RGB):", font=(None, 11, "bold"))
+        self.slider_title = ctk.CTkLabel(self.sliders_frame, text=t("theme_creator.main_color_label"), font=(None, 11, "bold"))
         self.slider_title.pack(pady=2, padx=10, anchor="w")
 
         self.slider_r = ctk.CTkSlider(self.sliders_frame, from_=0, to=255, number_of_steps=255,
@@ -121,7 +138,7 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
                                       command=self.update_colors_from_sliders)
         self.slider_b.pack(pady=2, padx=10, fill="x")
 
-        self.hover_title = ctk.CTkLabel(self.sliders_frame, text="Колір при наведенні (RGB):", font=(None, 11, "bold"))
+        self.hover_title = ctk.CTkLabel(self.sliders_frame, text=t("theme_creator.hover_color_label"), font=(None, 11, "bold"))
         self.slider_rh = ctk.CTkSlider(self.sliders_frame, from_=0, to=255, number_of_steps=255,
                                        command=self.update_colors_from_sliders)
         self.slider_gh = ctk.CTkSlider(self.sliders_frame, from_=0, to=255, number_of_steps=255,
@@ -129,8 +146,8 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
         self.slider_bh = ctk.CTkSlider(self.sliders_frame, from_=0, to=255, number_of_steps=255,
                                        command=self.update_colors_from_sliders)
 
-        self.on_target_changed("Кнопки")
-        btn_save = ctk.CTkButton(self.scroll_container, text="💾 Зберегти тему та застосувати", fg_color="green", hover_color="darkgreen",
+        self.on_target_changed(self.target_key_to_label["buttons"])
+        btn_save = ctk.CTkButton(self.scroll_container, text=t("theme_creator.save_btn"), fg_color="green", hover_color="darkgreen",
                                  command=self.save_theme)
         btn_save.pack(pady=15, padx=20, fill="x")
 
@@ -138,15 +155,16 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
         return f"#{int(rgb_tuple[0]):02x}{int(rgb_tuple[1]):02x}{int(rgb_tuple[2]):02x}"
 
     def on_target_changed(self, choice):
-        self.current_target = choice
-        main_rgb = self.colors[choice]["main"]
+        target_key = self.target_label_to_key.get(choice, "buttons")
+        self.current_target = target_key
+        main_rgb = self.colors[target_key]["main"]
         self.slider_r.set(main_rgb[0])
         self.slider_g.set(main_rgb[1])
         self.slider_b.set(main_rgb[2])
 
-        if choice == "Кнопки":
-            self.slider_title.configure(text="Основний колір кнопок (RGB):")
-            hover_rgb = self.colors[choice]["hover"]
+        if target_key == "buttons":
+            self.slider_title.configure(text=t("theme_creator.main_color_buttons_label"))
+            hover_rgb = self.colors[target_key]["hover"]
             self.slider_rh.set(hover_rgb[0])
             self.slider_gh.set(hover_rgb[1])
             self.slider_bh.set(hover_rgb[2])
@@ -155,7 +173,7 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
             self.slider_gh.pack(pady=2, padx=10, fill="x")
             self.slider_bh.pack(pady=2, padx=10, fill="x")
         else:
-            self.slider_title.configure(text=f"Колір елемента '{choice}' (RGB):")
+            self.slider_title.configure(text=t("theme_creator.element_color_label", element=choice))
             self.hover_title.pack_forget()
             self.slider_rh.pack_forget()
             self.slider_gh.pack_forget()
@@ -164,121 +182,121 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
     def update_colors_from_sliders(self, _=None):
         r, g, b = self.slider_r.get(), self.slider_g.get(), self.slider_b.get()
         self.colors[self.current_target]["main"] = (r, g, b)
-        if self.current_target == "Кнопки":
+        if self.current_target == "buttons":
             rh, gh, bh = self.slider_rh.get(), self.slider_gh.get(), self.slider_bh.get()
-            self.colors["Кнопки"]["hover"] = (rh, gh, bh)
+            self.colors["buttons"]["hover"] = (rh, gh, bh)
         self.update_preview()
 
     def update_preview(self, _=None):
         hex_colors = {k: self.rgb_to_hex(v["main"]) for k, v in self.colors.items()}
-        hex_hover = self.rgb_to_hex(self.colors["Кнопки"]["hover"])
+        hex_hover = self.rgb_to_hex(self.colors["buttons"]["hover"])
         font_name = self.font_dropdown.get()
         font_size = int(self.font_size_slider.get())
 
-        self.preview_window.configure(fg_color=hex_colors["Фон вікна"])
-        self.preview_frame.configure(fg_color=hex_colors["Фон фреймів"])
-        self.preview_label.configure(text_color=hex_colors["Текст"], font=(font_name, font_size))
-        self.preview_entry.configure(fg_color=hex_colors["Текстові поля"], text_color=hex_colors["Текст"],
+        self.preview_window.configure(fg_color=hex_colors["window_bg"])
+        self.preview_frame.configure(fg_color=hex_colors["frames_bg"])
+        self.preview_label.configure(text_color=hex_colors["text"], font=(font_name, font_size))
+        self.preview_entry.configure(fg_color=hex_colors["entries"], text_color=hex_colors["text"],
                                      font=(font_name, font_size))
-        self.preview_checkbox.configure(fg_color=hex_colors["Чекбокси/Світчі"], hover_color=hex_colors["Кнопки"],
-                                        text_color=hex_colors["Текст"], font=(font_name, font_size))
-        self.preview_switch.configure(progress_color=hex_colors["Чекбокси/Світчі"], text_color=hex_colors["Текст"],
+        self.preview_checkbox.configure(fg_color=hex_colors["checks_switches"], hover_color=hex_colors["buttons"],
+                                        text_color=hex_colors["text"], font=(font_name, font_size))
+        self.preview_switch.configure(progress_color=hex_colors["checks_switches"], text_color=hex_colors["text"],
                                       font=(font_name, font_size))
-        self.btn_preview.configure(fg_color=hex_colors["Кнопки"], hover_color=hex_hover, text_color="#FFFFFF",
+        self.btn_preview.configure(fg_color=hex_colors["buttons"], hover_color=hex_hover, text_color="#FFFFFF",
                                    font=(font_name, font_size))
 
     def save_theme(self):
         name = self.name_entry.get().strip().replace(" ", "_")
         if not name:
-            messagebox.showwarning("Помилка", "Введіть назву теми!")
+            messagebox.showwarning(t("settings.error_title"), t("theme_creator.error_empty_name"))
             return
 
         h = {k: self.rgb_to_hex(v["main"]) for k, v in self.colors.items()}
-        h_hover = self.rgb_to_hex(self.colors["Кнопки"]["hover"])
+        h_hover = self.rgb_to_hex(self.colors["buttons"]["hover"])
         font_name = self.font_dropdown.get()
         font_size = int(self.font_size_slider.get())
-        mode = self.mode_selector.get()
+        mode = self.mode_label_to_key.get(self.mode_selector.get(), "both")
 
         def make_color(custom_color, default_light, default_dark):
-            if mode == "До обох":
+            if mode == "both":
                 return [custom_color, custom_color]
-            elif mode == "Тільки Dark":
+            elif mode == "dark_only":
                 return [default_light, custom_color]
             else:
                 return [custom_color, default_dark]
 
         theme_structure = {
-            "CTk": {"fg_color": make_color(h["Фон вікна"], "#DCE4EE", "#001F3F")},
-            "CTkToplevel": {"fg_color": make_color(h["Фон вікна"], "#DCE4EE", "#001F3F")},
+            "CTk": {"fg_color": make_color(h["window_bg"], "#DCE4EE", "#001F3F")},
+            "CTkToplevel": {"fg_color": make_color(h["window_bg"], "#DCE4EE", "#001F3F")},
             "CTkFrame": {"corner_radius": 6, "border_width": 0,
-                         "fg_color": make_color(h["Фон фреймів"], "#BCC6D0", "#434E5A"),
+                         "fg_color": make_color(h["frames_bg"], "#BCC6D0", "#434E5A"),
                          "top_fg_color": ["#AAB0B6", "#003366"], "border_color": ["#5A5C66", "#003B6C"]},
             "CTkButton": {"corner_radius": 6, "border_width": 0,
-                          "fg_color": make_color(h["Кнопки"], "#003F6C", "#002E5D"),
+                          "fg_color": make_color(h["buttons"], "#003F6C", "#002E5D"),
                           "hover_color": make_color(h_hover, "#004080", "#00214B"),
                           "border_color": ["#003D4E", "#7F8C8D"], "text_color": ["#E5E9F0", "#E5E9F0"],
                           "text_color_disabled": ["#C0C6CE", "#A6A9AE"]},
             "CTkLabel": {"corner_radius": 0, "fg_color": "transparent",
-                         "text_color": make_color(h["Текст"], "#001F3F", "#E5E9F0")},
+                         "text_color": make_color(h["text"], "#001F3F", "#E5E9F0")},
             "CTkEntry": {"corner_radius": 6, "border_width": 2,
-                         "fg_color": make_color(h["Текстові поля"], "#F2F4F7", "#002B5B"),
+                         "fg_color": make_color(h["entries"], "#F2F4F7", "#002B5B"),
                          "border_color": ["#7D8B92", "#004060"],
-                         "text_color": make_color(h["Текст"], "#001F3F", "#E5E9F0"),
+                         "text_color": make_color(h["text"], "#001F3F", "#E5E9F0"),
                          "placeholder_text_color": ["#7D8B92", "#8B8F92"]},
             "CTkCheckBox": {"corner_radius": 6, "border_width": 3,
-                            "fg_color": make_color(h["Чекбокси/Світчі"], "#003F6C", "#002E5D"),
+                            "fg_color": make_color(h["checks_switches"], "#003F6C", "#002E5D"),
                             "border_color": ["#003D4E", "#7F8C8D"],
-                            "hover_color": make_color(h["Кнопки"], "#003F6C", "#002E5D"),
+                            "hover_color": make_color(h["buttons"], "#003F6C", "#002E5D"),
                             "checkmark_color": ["#E5E9F0", "#BCC6D0"],
-                            "text_color": make_color(h["Текст"], "#001F3F", "#E5E9F0"),
+                            "text_color": make_color(h["text"], "#001F3F", "#E5E9F0"),
                             "text_color_disabled": ["#A6A9AE", "#8C8D8F"]},
             "CTkSwitch": {"corner_radius": 1000, "border_width": 3, "button_length": 0,
                           "fg_color": ["#7D8B92", "#003B6C"],
-                          "progress_color": make_color(h["Чекбокси/Світчі"], "#003F6C", "#002E5D"),
+                          "progress_color": make_color(h["checks_switches"], "#003F6C", "#002E5D"),
                           "button_color": ["#002B5B", "#E5E9F0"], "button_hover_color": ["#003366", "#E5E9F0"],
-                          "text_color": make_color(h["Текст"], "#001F3F", "#E5E9F0"),
+                          "text_color": make_color(h["text"], "#001F3F", "#E5E9F0"),
                           "text_color_disabled": ["#A6A9AE", "#8C8D8F"]},
             "CTkRadioButton": {"corner_radius": 1000, "border_width_checked": 6, "border_width_unchecked": 3,
-                               "fg_color": make_color(h["Чекбокси/Світчі"], "#003F6C", "#002E5D"),
+                               "fg_color": make_color(h["checks_switches"], "#003F6C", "#002E5D"),
                                "border_color": ["#003D4E", "#7F8C8D"],
                                "hover_color": make_color(h_hover, "#004080", "#00214B"),
-                               "text_color": make_color(h["Текст"], "#001F3F", "#E5E9F0"),
+                               "text_color": make_color(h["text"], "#001F3F", "#E5E9F0"),
                                "text_color_disabled": ["#A6A9AE", "#8C8D8F"]},
             "CTkProgressBar": {"corner_radius": 1000, "border_width": 0, "fg_color": ["#7D8B92", "#003B6C"],
-                               "progress_color": make_color(h["Кнопки"], "#003F6C", "#002E5D"),
+                               "progress_color": make_color(h["buttons"], "#003F6C", "#002E5D"),
                                "border_color": ["gray", "gray"]},
             "CTkSlider": {"corner_radius": 1000, "button_corner_radius": 1000, "border_width": 6, "button_length": 0,
                           "fg_color": ["#7D8B92", "#003B6C"], "progress_color": ["#003D4E", "#B0B3B6"],
-                          "button_color": make_color(h["Кнопки"], "#003F6C", "#002E5D"),
+                          "button_color": make_color(h["buttons"], "#003F6C", "#002E5D"),
                           "button_hover_color": make_color(h_hover, "#004080", "#00214B")},
-            "CTkOptionMenu": {"corner_radius": 6, "fg_color": make_color(h["Кнопки"], "#003F6C", "#002E5D"),
+            "CTkOptionMenu": {"corner_radius": 6, "fg_color": make_color(h["buttons"], "#003F6C", "#002E5D"),
                               "button_color": make_color(h_hover, "#004080", "#00214B"),
-                              "button_hover_color": make_color(h["Кнопки"], "#002E5D", "#001F3F"),
+                              "button_hover_color": make_color(h["buttons"], "#002E5D", "#001F3F"),
                               "text_color": ["#E5E9F0", "#E5E9F0"], "text_color_disabled": ["#C0C6CE", "#A6A9AE"]},
             "CTkComboBox": {"corner_radius": 6, "border_width": 2,
-                            "fg_color": make_color(h["Текстові поля"], "#F2F4F7", "#002B5B"),
+                            "fg_color": make_color(h["entries"], "#F2F4F7", "#002B5B"),
                             "border_color": ["#7D8B92", "#004060"], "button_color": ["#7D8B92", "#004060"],
                             "button_hover_color": ["#4F5B66", "#5B6C77"],
-                            "text_color": make_color(h["Текст"], "#001F3F", "#E5E9F0"),
+                            "text_color": make_color(h["text"], "#001F3F", "#E5E9F0"),
                             "text_color_disabled": ["#8C8D8F", "#8C8D8F"]},
             "CTkScrollbar": {"corner_radius": 1000, "border_spacing": 4, "fg_color": "transparent",
                              "button_color": ["#8C8D8F", "#6D6E70"], "button_hover_color": ["#7D8B92", "#5A5B5C"]},
             "CTkSegmentedButton": {"corner_radius": 6, "border_width": 2, "fg_color": ["#7D8B92", "#003B6C"],
-                                   "selected_color": make_color(h["Кнопки"], "#003F6C", "#002E5D"),
+                                   "selected_color": make_color(h["buttons"], "#003F6C", "#002E5D"),
                                    "selected_hover_color": make_color(h_hover, "#004080", "#00214B"),
                                    "unselected_color": ["#7D8B92", "#003B6C"],
                                    "unselected_hover_color": ["#7F8C8D", "#5A5B5C"],
                                    "text_color": ["#E5E9F0", "#E5E9F0"], "text_color_disabled": ["#C0C6CE", "#A6A9AE"]},
             "CTkTextbox": {"corner_radius": 6, "border_width": 0,
-                           "fg_color": make_color(h["Текстові поля"], "#F2F4F7", "#002B5B"),
+                           "fg_color": make_color(h["entries"], "#F2F4F7", "#002B5B"),
                            "border_color": ["#7D8B92", "#004060"],
-                           "text_color": make_color(h["Текст"], "#001F3F", "#E5E9F0"),
+                           "text_color": make_color(h["text"], "#001F3F", "#E5E9F0"),
                            "scrollbar_button_color": ["#8C8D8F", "#6D6E70"],
                            "scrollbar_button_hover_color": ["#7D8B92", "#5A5B5C"]},
             "CTkScrollableFrame": {"label_fg_color": ["#BCC6D0", "#003B6C"]},
-            "DropdownMenu": {"fg_color": make_color(h["Фон вікна"], "#DCE4EE", "#003B6C"),
-                             "hover_color": make_color(h["Фон фреймів"], "#BCC6D0", "#003B6C"),
-                             "text_color": make_color(h["Текст"], "#001F3F", "#DCE4EE")},
+            "DropdownMenu": {"fg_color": make_color(h["window_bg"], "#DCE4EE", "#003B6C"),
+                             "hover_color": make_color(h["frames_bg"], "#BCC6D0", "#003B6C"),
+                             "text_color": make_color(h["text"], "#001F3F", "#DCE4EE")},
             "CTkFont": {
                 "macOS": {"family": font_name, "size": font_size, "weight": "normal"},
                 "Windows": {"family": font_name, "size": font_size, "weight": "normal"},
@@ -296,7 +314,7 @@ class ThemeCreatorWindow(ctk.CTkToplevel):
             self.on_save_callback(name)
             self.destroy()
         except Exception as e:
-            messagebox.showerror("Помилка", f"Не вдалося зберегти тему: {e}")
+            messagebox.showerror(t("settings.error_title"), t("theme_creator.error_save_failed", error=e))
 
 
 class HotkeyManagerDialog(ctk.CTkToplevel):
@@ -309,7 +327,7 @@ class HotkeyManagerDialog(ctk.CTkToplevel):
         self.settings_manager = settings_manager
         self.preset_manager_ref = preset_manager_ref
 
-        self.title("Керування гарячими клавішами")
+        self.title(t("hotkeys.window_title"))
         self.geometry("440x560")
         self.minsize(360, 380)
         self.transient(parent)
@@ -329,8 +347,7 @@ class HotkeyManagerDialog(ctk.CTkToplevel):
         if not hotkey_manager.is_available():
             warn = ctk.CTkLabel(
                 scroll,
-                text="⚠ Бібліотека 'keyboard' не встановлена — гарячі клавіші не "
-                     "працюватимуть, поки її не встановити.\nКоманда: pip install keyboard",
+                text=t("hotkeys.missing_lib_warning"),
                 font=(None, 11), text_color=("#B22222", "#FF7B7B"),
                 justify="left", anchor="w", wraplength=380
             )
@@ -340,10 +357,10 @@ class HotkeyManagerDialog(ctk.CTkToplevel):
         show_box = ctk.CTkFrame(scroll)
         show_box.pack(pady=(10, 8), padx=10, fill="x")
         ctk.CTkLabel(
-            show_box, text="🖥 Показати вікно лаунчера з трею", font=(None, 12, "bold")
+            show_box, text=t("hotkeys.show_window_title"), font=(None, 12, "bold")
         ).pack(pady=(8, 2), padx=10, anchor="w")
         ctk.CTkLabel(
-            show_box, text="Спрацьовує завжди, навіть якщо вікно згорнуте.",
+            show_box, text=t("hotkeys.show_window_hint"),
             font=(None, 10), text_color="gray", anchor="w"
         ).pack(pady=(0, 5), padx=10, anchor="w")
 
@@ -357,10 +374,10 @@ class HotkeyManagerDialog(ctk.CTkToplevel):
         presets_box = ctk.CTkFrame(scroll)
         presets_box.pack(pady=(0, 10), padx=10, fill="x")
         ctk.CTkLabel(
-            presets_box, text="🚀 Миттєвий запуск наборів", font=(None, 12, "bold")
+            presets_box, text=t("hotkeys.presets_title"), font=(None, 12, "bold")
         ).pack(pady=(8, 2), padx=10, anchor="w")
         ctk.CTkLabel(
-            presets_box, text="Запускає весь набір програм без відкриття вікна лаунчера.",
+            presets_box, text=t("hotkeys.presets_hint"),
             font=(None, 10), text_color="gray", anchor="w"
         ).pack(pady=(0, 5), padx=10, anchor="w")
 
@@ -370,8 +387,7 @@ class HotkeyManagerDialog(ctk.CTkToplevel):
         if not preset_names:
             ctk.CTkLabel(
                 presets_box,
-                text="Немає жодного набору. Створіть набір у вкладці 'Набори',\n"
-                     "щоб можна було призначити йому гарячу клавішу.",
+                text=t("hotkeys.no_presets"),
                 font=(None, 11), text_color="gray", justify="left", anchor="w"
             ).pack(pady=(0, 12), padx=10, anchor="w", fill="x")
         else:
@@ -387,7 +403,7 @@ class HotkeyManagerDialog(ctk.CTkToplevel):
                     on_save=lambda hk, n=name: self._save_preset_hotkey(n, hk)
                 )
 
-        ctk.CTkButton(self, text="Закрити", command=self.destroy).pack(pady=(0, 12), padx=15, fill="x")
+        ctk.CTkButton(self, text=t("main.manage_categories_close"), command=self.destroy).pack(pady=(0, 12), padx=15, fill="x")
 
     def _build_hotkey_row(self, container, initial_value, on_save):
         """ Створює один рядок "поле вводу + 🎙 записати + 💾 зберегти".
@@ -397,7 +413,7 @@ class HotkeyManagerDialog(ctk.CTkToplevel):
         row = ctk.CTkFrame(container, fg_color="transparent")
         row.pack(pady=(0, 8), padx=10, fill="x")
 
-        entry = ctk.CTkEntry(row, placeholder_text="напр: ctrl+alt+l")
+        entry = ctk.CTkEntry(row, placeholder_text=t("hotkeys.hotkey_placeholder"))
         entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
         if initial_value:
             entry.insert(0, initial_value)
@@ -409,8 +425,8 @@ class HotkeyManagerDialog(ctk.CTkToplevel):
         def do_record():
             if not hotkey_manager.is_available():
                 messagebox.showwarning(
-                    "Недоступно",
-                    "Бібліотека 'keyboard' не встановлена.\nВстановіть: pip install keyboard"
+                    t("hotkeys.unavailable_title"),
+                    t("hotkeys.unavailable_text")
                 )
                 return
             record_btn.configure(text="...", state="disabled")
@@ -434,8 +450,8 @@ class HotkeyManagerDialog(ctk.CTkToplevel):
             normalized = hotkey_manager.normalize_hotkey(raw) if raw else ""
             if raw and normalized is None:
                 messagebox.showerror(
-                    "Некоректна комбінація",
-                    f"Не вдалося розпізнати «{raw}».\nПриклад: ctrl+alt+l"
+                    t("hotkeys.invalid_combo_title"),
+                    t("hotkeys.invalid_combo_text", value=raw)
                 )
                 return
             on_save(normalized or "")
@@ -445,9 +461,9 @@ class HotkeyManagerDialog(ctk.CTkToplevel):
     def _save_show_hotkey(self, normalized):
         self.settings_manager.set_show_hotkey(normalized)
         if normalized:
-            messagebox.showinfo("Готово", f"Гаряча клавіша «{normalized}» тепер відкриває лаунчер.")
+            messagebox.showinfo(t("hotkeys.done_title"), t("hotkeys.show_hotkey_set", hotkey=normalized))
         else:
-            messagebox.showinfo("Готово", "Глобальну гарячу клавішу показу вікна вимкнено.")
+            messagebox.showinfo(t("hotkeys.done_title"), t("hotkeys.show_hotkey_disabled"))
 
     def _save_preset_hotkey(self, name, normalized):
         """ Зберігає гарячу клавішу набору через PresetManager (єдине
@@ -459,23 +475,22 @@ class HotkeyManagerDialog(ctk.CTkToplevel):
         if normalized:
             conflicts = []
             if self.settings_manager.get_show_hotkey() == normalized:
-                conflicts.append("показу вікна лаунчера")
+                conflicts.append(t("hotkeys.conflict_show_window"))
             for other_name, other_data in self.preset_manager_ref.presets.items():
                 if other_name != name and isinstance(other_data, dict) and \
                         (other_data.get("hotkey") or "").strip().lower() == normalized:
-                    conflicts.append(f"набору «{other_name}»")
+                    conflicts.append(t("hotkeys.conflict_preset", name=other_name))
             if conflicts:
                 messagebox.showwarning(
-                    "Комбінація вже використовується",
-                    f"Клавіша «{normalized}» вже призначена для: {', '.join(conflicts)}.\n\n"
-                    "Можна залишити так, але спрацюють ОБИДВІ дії одночасно."
+                    t("hotkeys.conflict_title"),
+                    t("hotkeys.conflict_text", hotkey=normalized, list=", ".join(conflicts))
                 )
 
         self.preset_manager_ref.set_preset_hotkey(name, normalized)
         if normalized:
-            messagebox.showinfo("Готово", f"Гаряча клавіша «{normalized}» тепер запускає набір «{name}».")
+            messagebox.showinfo(t("hotkeys.done_title"), t("hotkeys.preset_hotkey_set", hotkey=normalized, name=name))
         else:
-            messagebox.showinfo("Готово", f"Гарячу клавішу для набору «{name}» прибрано.")
+            messagebox.showinfo(t("hotkeys.done_title"), t("hotkeys.preset_hotkey_removed", name=name))
 
 
 class StatsDialog(ctk.CTkToplevel):
@@ -498,7 +513,7 @@ class StatsDialog(ctk.CTkToplevel):
         # оновив лічильники (▶ N) біля програм, не чекаючи наступної дії
         self.on_reset = on_reset
 
-        self.title("Статистика використання")
+        self.title(t("stats.window_title"))
         self.geometry("480x580")
         self.minsize(380, 380)
         self.transient(parent)
@@ -523,14 +538,12 @@ class StatsDialog(ctk.CTkToplevel):
 
     def create_widgets(self):
         ctk.CTkLabel(
-            self, text="📊 Скільки разів запущено кожну програму", font=(None, 13, "bold")
+            self, text=t("stats.chart_title"), font=(None, 13, "bold")
         ).pack(pady=(12, 4), padx=15, anchor="w")
 
         hint = ctk.CTkLabel(
             self,
-            text="Рахуються лише реальні запуски через лаунчер — зі списку 'Програми', "
-                 "з наборів, за розкладом чи в автозапуску. Допомагає побачити, який софт "
-                 "дійсно потрібен, а який можна прибрати зі списку.",
+            text=t("stats.hint"),
             font=(None, 10), text_color="gray", justify="left", anchor="w", wraplength=440
         )
         hint.pack(pady=(0, 10), padx=15, anchor="w", fill="x")
@@ -541,12 +554,12 @@ class StatsDialog(ctk.CTkToplevel):
         self.render_chart()
 
         ctk.CTkButton(
-            self, text="🗑 Скинути всю статистику", fg_color="transparent", border_width=1,
+            self, text=t("stats.reset_all_btn"), fg_color="transparent", border_width=1,
             text_color=("#001F3F", "#E5E9F0"),
             command=self.confirm_reset_all
         ).pack(pady=(5, 5), padx=15, fill="x")
 
-        ctk.CTkButton(self, text="Закрити", command=self.destroy).pack(pady=(0, 12), padx=15, fill="x")
+        ctk.CTkButton(self, text=t("main.manage_categories_close"), command=self.destroy).pack(pady=(0, 12), padx=15, fill="x")
 
     def render_chart(self):
         """ (Пере)малює графік з нуля — викликається і при першому відкритті,
@@ -559,7 +572,7 @@ class StatsDialog(ctk.CTkToplevel):
         if not data:
             ctk.CTkLabel(
                 self.scroll,
-                text="Немає жодної доданої програми на вкладці 'Програми'.",
+                text=t("presets.empty_no_programs"),
                 text_color="gray"
             ).pack(pady=20)
             return
@@ -592,8 +605,8 @@ class StatsDialog(ctk.CTkToplevel):
 
     def confirm_reset_all(self):
         if messagebox.askyesno(
-            "Скинути статистику",
-            "Скинути лічильники запусків для ВСІХ програм?\nЦю дію не можна скасувати."
+            t("stats.reset_confirm_title"),
+            t("stats.reset_confirm_text")
         ):
             stats_manager.reset_all()
             self.render_chart()
@@ -750,14 +763,14 @@ class SettingsManager(ctk.CTkFrame):
         # 1. Тема (тепер кріпиться до self.scroll_container)
         self.theme_box = ctk.CTkFrame(self.scroll_container)
         self.theme_box.pack(pady=8, fill="x")
-        ctk.CTkLabel(self.theme_box, text="Візуальна тема програми:").pack(pady=5, padx=10, anchor="w")
+        ctk.CTkLabel(self.theme_box, text=t("settings.theme_label")).pack(pady=5, padx=10, anchor="w")
         self.theme_dropdown = ctk.CTkOptionMenu(self.theme_box, values=["Dark", "Light"], command=self.change_theme)
         self.theme_dropdown.pack(pady=5, padx=10, fill="x")
 
         # 2. Колір
         self.color_box = ctk.CTkFrame(self.scroll_container)
         self.color_box.pack(pady=8, fill="x")
-        ctk.CTkLabel(self.color_box, text="Колір та шрифт стилю (потребує перезапуску):").pack(pady=5, padx=10,
+        ctk.CTkLabel(self.color_box, text=t("settings.color_label")).pack(pady=5, padx=10,
                                                                                                anchor="w")
 
         self.color_dropdown = ctk.CTkOptionMenu(self.color_box, values=self.get_available_themes(),
@@ -767,37 +780,50 @@ class SettingsManager(ctk.CTkFrame):
         theme_btn_frame = ctk.CTkFrame(self.color_box, fg_color="transparent")
         theme_btn_frame.pack(pady=5, padx=10, fill="x")
 
-        ctk.CTkButton(theme_btn_frame, text="📁 Імпортувати .json", command=self.import_theme_file, height=24).pack(
+        ctk.CTkButton(theme_btn_frame, text=t("settings.import_json"), command=self.import_theme_file, height=24).pack(
             side="left", expand=True, fill="x", padx=2)
-        ctk.CTkButton(theme_btn_frame, text="🎨 FK Конструктор теми", command=self.open_theme_creator, height=24).pack(
+        ctk.CTkButton(theme_btn_frame, text=t("settings.theme_creator"), command=self.open_theme_creator, height=24).pack(
             side="right", expand=True, fill="x", padx=2)
 
-        self.btn_reset_themes = ctk.CTkButton(self.color_box, text="💥 Скинути всі кастомні теми",
+        self.btn_reset_themes = ctk.CTkButton(self.color_box, text=t("settings.reset_themes"),
                                               fg_color="transparent", border_width=1, height=24,
                                               text_color=("#001F3F", "#E5E9F0"),
                                               command=self.reset_to_factory_themes)
         self.btn_reset_themes.pack(pady=(2, 5), padx=12, fill="x")
 
+        # 2.5 Мова інтерфейсу
+        self.language_box = ctk.CTkFrame(self.scroll_container)
+        self.language_box.pack(pady=8, fill="x")
+        ctk.CTkLabel(self.language_box, text=t("settings.language_label")).pack(pady=5, padx=10, anchor="w")
+
+        self._lang_codes_by_name = locale_manager.available_languages()
+        self._lang_names_by_code = {v: k for k, v in self._lang_codes_by_name.items()}
+        self.language_dropdown = ctk.CTkOptionMenu(
+            self.language_box,
+            values=list(self._lang_codes_by_name.values()),
+            command=self.change_language
+        )
+        self.language_dropdown.pack(pady=5, padx=10, fill="x")
+
         # 3. Поведінка
         self.behavior_box = ctk.CTkFrame(self.scroll_container)
         self.behavior_box.pack(pady=8, fill="x")
-        ctk.CTkLabel(self.behavior_box, text="Поведінка лаунчера:").pack(pady=5, padx=10, anchor="w")
+        ctk.CTkLabel(self.behavior_box, text=t("settings.behavior_label")).pack(pady=5, padx=10, anchor="w")
 
-        self.close_checkbox = ctk.CTkCheckBox(self.behavior_box, text="Закривати лаунчер після запуску програм",
+        self.close_checkbox = ctk.CTkCheckBox(self.behavior_box, text=t("settings.close_after_launch"),
                                               command=self.save_settings)
         self.close_checkbox.pack(pady=4, padx=10, fill="x", anchor="w")
 
         self.tray_checkbox = ctk.CTkCheckBox(
             self.behavior_box,
-            text="Не закривати, а згортати у фоновий режим (трей) при натисканні ❌",
+            text=t("settings.minimize_to_tray"),
             command=self.update_close_protocol
         )
         self.tray_checkbox.pack(pady=(4, 0), padx=10, fill="x", anchor="w")
 
         tray_hint = ctk.CTkLabel(
             self.behavior_box,
-            text="Трей — це значок біля годинника Windows. Потрібно увімкнути,\n"
-                 "щоб розклад продовжував працювати після закриття вікна.",
+            text=t("settings.tray_hint"),
             font=(None, 10), text_color="gray", justify="left", anchor="w"
         )
         tray_hint.pack(pady=(0, 6), padx=28, fill="x", anchor="w")
@@ -805,23 +831,21 @@ class SettingsManager(ctk.CTkFrame):
 
         self.autostart_checkbox = ctk.CTkCheckBox(
             self.behavior_box,
-            text="Автоматично запускати лаунчер при вмиканні Windows",
+            text=t("settings.windows_autostart"),
             command=self.toggle_windows_autostart
         )
         self.autostart_checkbox.pack(pady=4, padx=10, fill="x", anchor="w")
 
         self.smart_launch_checkbox = ctk.CTkCheckBox(
             self.behavior_box,
-            text="🧠 Розумний запуск: не відкривати повторно, якщо вже запущено",
+            text=t("settings.smart_launch"),
             command=self.save_settings
         )
         self.smart_launch_checkbox.pack(pady=(4, 0), padx=10, fill="x", anchor="w")
 
         smart_launch_hint = ctk.CTkLabel(
             self.behavior_box,
-            text="Перед запуском лаунчер перевірить список запущених процесів\n"
-                 "(через psutil) і пропустить програму, якщо вона вже відкрита —\n"
-                 "щоб не плодити зайві вікна при повторних кліках чи спрацюванні розкладу.",
+            text=t("settings.smart_launch_hint"),
             font=(None, 10), text_color="gray", justify="left", anchor="w"
         )
         smart_launch_hint.pack(pady=(0, 6), padx=28, fill="x", anchor="w")
@@ -830,7 +854,7 @@ class SettingsManager(ctk.CTkFrame):
         # 4. Затримка
         self.delay_box = ctk.CTkFrame(self.scroll_container)
         self.delay_box.pack(pady=8, fill="x")
-        self.delay_label = ctk.CTkLabel(self.delay_box, text="Затримка між запуском програм: 0 сек.")
+        self.delay_label = ctk.CTkLabel(self.delay_box, text=t("settings.delay_label", seconds=0))
         self.delay_label.pack(pady=5, padx=10, anchor="w")
         self.delay_slider = ctk.CTkSlider(self.delay_box, from_=0, to=10, number_of_steps=10,
                                           command=self.on_slider_move)
@@ -840,14 +864,12 @@ class SettingsManager(ctk.CTkFrame):
         self.hotkey_box = ctk.CTkFrame(self.scroll_container)
         self.hotkey_box.pack(pady=8, fill="x")
         ctk.CTkLabel(
-            self.hotkey_box, text="⌨️ Гарячі клавіші:", font=(None, 12, "bold")
+            self.hotkey_box, text=t("settings.hotkeys_label"), font=(None, 12, "bold")
         ).pack(pady=(5, 2), padx=10, anchor="w")
 
         hotkey_hint = ctk.CTkLabel(
             self.hotkey_box,
-            text="Показ вікна лаунчера з трею та миттєвий запуск окремих\n"
-                 "наборів без відкриття вікна — усі комбінації клавіш\n"
-                 "зібрані і редагуються в одному вікні.",
+            text=t("settings.hotkeys_hint"),
             font=(None, 10), text_color="gray", justify="left", anchor="w"
         )
         hotkey_hint.pack(pady=(0, 6), padx=10, anchor="w", fill="x")
@@ -855,15 +877,14 @@ class SettingsManager(ctk.CTkFrame):
 
         ctk.CTkButton(
             self.hotkey_box,
-            text="🎹 Керування гарячими клавішами...",
+            text=t("settings.hotkeys_btn"),
             command=self.open_hotkeys_dialog
         ).pack(pady=(0, 10), padx=10, fill="x")
 
         if not hotkey_manager.is_available():
             ctk.CTkLabel(
                 self.hotkey_box,
-                text="⚠ Бібліотека 'keyboard' не знайдена — гарячі клавіші не "
-                     "працюватимуть.\nВстановіть командою: pip install keyboard",
+                text=t("settings.hotkeys_missing_lib"),
                 font=(None, 10), text_color=("#B22222", "#FF7B7B"),
                 justify="left", anchor="w"
             ).pack(pady=(0, 8), padx=10, anchor="w", fill="x")
@@ -872,13 +893,12 @@ class SettingsManager(ctk.CTkFrame):
         self.stats_box = ctk.CTkFrame(self.scroll_container)
         self.stats_box.pack(pady=8, fill="x")
         ctk.CTkLabel(
-            self.stats_box, text="📊 Статистика використання:", font=(None, 12, "bold")
+            self.stats_box, text=t("settings.stats_label"), font=(None, 12, "bold")
         ).pack(pady=(5, 2), padx=10, anchor="w")
 
         stats_hint = ctk.CTkLabel(
             self.stats_box,
-            text="Скільки разів кожну програму реально було запущено через\n"
-                 "лаунчер — щоб було видно, який софт дійсно потрібен.",
+            text=t("settings.stats_hint"),
             font=(None, 10), text_color="gray", justify="left", anchor="w"
         )
         stats_hint.pack(pady=(0, 6), padx=10, anchor="w", fill="x")
@@ -886,27 +906,27 @@ class SettingsManager(ctk.CTkFrame):
 
         ctk.CTkButton(
             self.stats_box,
-            text="📊 Переглянути статистику...",
+            text=t("settings.stats_btn"),
             command=self.open_stats_dialog
         ).pack(pady=(0, 10), padx=10, fill="x")
 
         # 5. Резервне копіювання
         self.backup_box = ctk.CTkFrame(self.scroll_container)
         self.backup_box.pack(pady=8, fill="x")
-        ctk.CTkLabel(self.backup_box, text="📦 Резервне копіювання конфігурацій:", font=(None, 12, "bold")).pack(pady=4,
+        ctk.CTkLabel(self.backup_box, text=t("settings.backup_label"), font=(None, 12, "bold")).pack(pady=4,
                                                                                                                 padx=10,
                                                                                                                 anchor="w")
 
         backup_btn_frame = ctk.CTkFrame(self.backup_box, fg_color="transparent")
         backup_btn_frame.pack(pady=4, padx=10, fill="x")
 
-        ctk.CTkButton(backup_btn_frame, text="💾 Створити бекап (ZIP)", command=self.create_backup, height=26).pack(
+        ctk.CTkButton(backup_btn_frame, text=t("settings.backup_create"), command=self.create_backup, height=26).pack(
             side="left", expand=True, fill="x", padx=2)
-        ctk.CTkButton(backup_btn_frame, text="📂 Відновити з бекапу", command=self.restore_backup, height=26).pack(
+        ctk.CTkButton(backup_btn_frame, text=t("settings.backup_restore"), command=self.restore_backup, height=26).pack(
             side="right", expand=True, fill="x", padx=2)
 
         # 6. Кнопка перезапуску
-        self.btn_restart = ctk.CTkButton(self.scroll_container, text="🔄 Перезапустити програму",
+        self.btn_restart = ctk.CTkButton(self.scroll_container, text=t("settings.restart_btn"),
                                          command=self.restart_program)
         self.btn_restart.pack(pady=15, fill="x")
 
@@ -914,7 +934,7 @@ class SettingsManager(ctk.CTkFrame):
         if self.restart_callback_func:
             self.restart_callback_func()
         else:
-            messagebox.showwarning("Помилка", "Функцію перезапуску не було передано.")
+            messagebox.showwarning(t("settings.error_title"), t("settings.restart_error"))
 
     def toggle_windows_autostart(self):
         enable = (self.autostart_checkbox.get() == 1)
@@ -939,7 +959,7 @@ class SettingsManager(ctk.CTkFrame):
             winreg.CloseKey(key)
             self.save_settings()
         except Exception as e:
-            messagebox.showerror("Автозапуск", f"Не вдалося змінити налаштування в реєстрі Windows: {e}")
+            messagebox.showerror(t("settings.autostart_error_title"), t("settings.autostart_error_text", error=e))
 
     def is_windows_autostart_active(self):
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -979,7 +999,7 @@ class SettingsManager(ctk.CTkFrame):
             # Автозапуск вимкнено — синхронізувати нічого
             return
         except Exception as e:
-            print(f"Автозапуск: не вдалося прочитати шлях з реєстру: {e}")
+            print(t("settings.autostart_read_error", error=e))
             return
 
         if saved_value == expected_value:
@@ -989,20 +1009,20 @@ class SettingsManager(ctk.CTkFrame):
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
             winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, expected_value)
             winreg.CloseKey(key)
-            print(f"Автозапуск: шлях у реєстрі застарів і був оновлений на '{current_path}'.")
+            print(t("settings.autostart_path_updated", path=current_path))
         except Exception as e:
-            print(f"Автозапуск: не вдалося оновити застарілий шлях у реєстрі: {e}")
+            print(t("settings.autostart_update_error", error=e))
 
     def create_backup(self):
         source_dir = self.settings_dir
         if not os.path.exists(source_dir) or not os.listdir(source_dir):
-            messagebox.showwarning("Бекап", "Немає збережених налаштувань чи розкладів для резервного копіювання!")
+            messagebox.showwarning(t("settings.backup_title"), t("settings.backup_nothing_to_backup"))
             return
 
         file_path = filedialog.asksaveasfilename(
             defaultextension=".zip",
-            filetypes=[("ZIP Архів", "*.zip")],
-            title="Зберегти резервну копію як..."
+            filetypes=[(t("settings.zip_filter_label"), "*.zip")],
+            title=t("settings.backup_save_dialog_title")
         )
         if not file_path: return
 
@@ -1011,19 +1031,19 @@ class SettingsManager(ctk.CTkFrame):
                 for root, dirs, files in os.walk(source_dir):
                     for file in files:
                         zipf.write(os.path.join(root, file), file)
-            messagebox.showinfo("Успіх", "Резервну копію налаштувань та розкладу успешно створено!")
+            messagebox.showinfo(t("presets.success_title"), t("settings.backup_created"))
         except Exception as e:
-            messagebox.showerror("Помилка", f"Не вдалося створити файл бекапу: {e}")
+            messagebox.showerror(t("settings.error_title"), t("settings.backup_create_failed", error=e))
 
     def restore_backup(self):
         file_path = filedialog.askopenfilename(
-            filetypes=[("ZIP Архів", "*.zip")],
-            title="Оберіть файл резервної копії"
+            filetypes=[(t("settings.zip_filter_label"), "*.zip")],
+            title=t("settings.backup_open_dialog_title")
         )
         if not file_path: return
 
-        if messagebox.askyesno("Відновлення",
-                               "Поточні налаштування, розклад та наборы будуть повністю замінені даними з архіву. Продовжити?"):
+        if messagebox.askyesno(t("settings.restore_confirm_title"),
+                               t("settings.restore_confirm_text")):
             # Спочатку розпаковуємо у тимчасову папку (а не одразу в робочу
             # директорію) і перевіряємо коректність усіх json-файлів.
             # Це захищає від ситуації, коли пошкоджений/невірний архів
@@ -1033,15 +1053,14 @@ class SettingsManager(ctk.CTkFrame):
                     with zipfile.ZipFile(file_path, 'r') as zipf:
                         zipf.extractall(tmp_dir)
                 except Exception as e:
-                    messagebox.showerror("Помилка", f"Не вдалося розархівувати дані: {e}")
+                    messagebox.showerror(t("settings.error_title"), t("settings.backup_extract_failed", error=e))
                     return
 
                 is_valid, error_msg = self.validate_backup_data(tmp_dir)
                 if not is_valid:
                     messagebox.showerror(
-                        "Помилка",
-                        "Файл резервної копії пошкоджений або має невірний формат.\n"
-                        f"{error_msg}\n\nВідновлення скасовано, поточні дані не змінено."
+                        t("settings.error_title"),
+                        t("settings.backup_invalid", details=error_msg)
                     )
                     return
 
@@ -1054,10 +1073,9 @@ class SettingsManager(ctk.CTkFrame):
                         if os.path.isfile(src):
                             shutil.copy2(src, os.path.join(target_dir, file))
 
-                    messagebox.showinfo("Успіх",
-                                        "Конфігурацію відновлено! Натисніть кнопку перезапуску програми для застосування змін.")
+                    messagebox.showinfo(t("presets.success_title"), t("settings.restore_success"))
                 except Exception as e:
-                    messagebox.showerror("Помилка", f"Не вдалося застосувати дані з бекапу: {e}")
+                    messagebox.showerror(t("settings.error_title"), t("settings.backup_apply_failed", error=e))
 
     def validate_backup_data(self, folder):
         """ Перевіряє json-файли з бекапу (settings.json, presets.json,
@@ -1079,12 +1097,12 @@ class SettingsManager(ctk.CTkFrame):
                 with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                return False, f"Файл '{filename}' не є коректним JSON ({e})"
+                return False, t("settings.backup_file_not_json", filename=filename, error=e)
             except Exception as e:
-                return False, f"Не вдалося прочитати файл '{filename}' ({e})"
+                return False, t("settings.backup_file_read_failed", filename=filename, error=e)
 
             if not isinstance(data, expected_type):
-                return False, f"Файл '{filename}' має неочікувану структуру даних"
+                return False, t("settings.backup_file_bad_structure", filename=filename)
 
         return True, ""
 
@@ -1096,11 +1114,11 @@ class SettingsManager(ctk.CTkFrame):
         self.color_dropdown.configure(values=all_themes)
         self.color_dropdown.set(theme_name)
         self.change_color_theme(theme_name)
-        messagebox.showinfo("Успіх", f"Тему '{theme_name}' створено! Натисніть кнопку перезапуску.")
+        messagebox.showinfo(t("presets.success_title"), t("settings.theme_created", name=theme_name))
 
     # --- ВСІ ТВОЇ ОРИГІНАЛЬНІ ФУНКЦІЇ БЕЗ ЗМІН ---
     def import_theme_file(self):
-        file_paths = filedialog.askopenfilenames(filetypes=[("CustomTkinter Theme", "*.json")])
+        file_paths = filedialog.askopenfilenames(filetypes=[(t("settings.theme_file_filter_label"), "*.json")])
         if not file_paths:
             return
 
@@ -1135,21 +1153,20 @@ class SettingsManager(ctk.CTkFrame):
         if imported and not errors:
             names = ", ".join(imported)
             messagebox.showinfo(
-                "Успіх",
-                f"Імпортовано тем: {len(imported)} ({names}).\nПерезапустіть лаунчер, щоб застосувати обрану."
+                t("presets.success_title"),
+                t("settings.import_success", count=len(imported), names=names)
             )
         elif imported and errors:
             names = ", ".join(imported)
             err_list = "\n".join(errors)
             messagebox.showwarning(
-                "Імпортовано частково",
-                f"Успішно імпортовано ({len(imported)}): {names}.\n\n"
-                f"Не вдалося імпортувати ({len(errors)}):\n{err_list}\n\n"
-                f"Перезапустіть лаунчер, щоб застосувати обрану тему."
+                t("settings.import_partial_title"),
+                t("settings.import_partial_text", success_count=len(imported), names=names,
+                  fail_count=len(errors), errors=err_list)
             )
         else:
             err_list = "\n".join(errors)
-            messagebox.showerror("Помилка", f"Жодну тему не вдалося імпортувати:\n{err_list}")
+            messagebox.showerror(t("settings.error_title"), t("settings.import_all_failed", errors=err_list))
 
     def validate_theme_file(self, file_path):
         """ Перевіряє, що обраний .json файл — валідний JSON-об'єкт
@@ -1160,18 +1177,18 @@ class SettingsManager(ctk.CTkFrame):
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            return False, f"Файл не є коректним JSON ({e})"
+            return False, t("settings.theme_file_not_json", error=e)
         except Exception as e:
-            return False, f"Не вдалося прочитати файл ({e})"
+            return False, t("settings.theme_file_read_failed", error=e)
 
         if not isinstance(data, dict) or not data:
-            return False, "Файл порожній або має невірну структуру (очікується JSON-об'єкт)"
+            return False, t("settings.theme_file_empty")
 
         # Тема CustomTkinter завжди описує стилі базових віджетів —
         # якщо жодного з очікуваних ключів немає, це, ймовірно, не тема.
         required_keys = {"CTk", "CTkButton", "CTkFrame", "CTkLabel"}
         if not required_keys.intersection(data.keys()):
-            return False, "Файл не схожий на тему CustomTkinter (відсутні очікувані ключі стилів)"
+            return False, t("settings.theme_file_not_theme")
 
         return True, ""
 
@@ -1182,8 +1199,24 @@ class SettingsManager(ctk.CTkFrame):
     def change_color_theme(self, choice):
         self.save_settings()
 
+    def change_language(self, choice):
+        """ Мова інтерфейсу застосовується так само, як кольорова тема —
+        через повний перезапуск лаунчера, бо майже весь текст віджетів
+        формується один раз при їх створенні. Тут ми лише зберігаємо
+        обраний код мови в settings.json і пропонуємо перезапустити
+        одразу; якщо користувач відмовиться — нова мова застосується
+        при наступному звичайному запуску/перезапуску лаунчера. """
+        lang_code = self._lang_names_by_code.get(choice, locale_manager.DEFAULT_LANGUAGE)
+        locale_manager.set_language(lang_code)
+        self.save_settings()
+        if messagebox.askyesno(
+            t("settings.language_label"),
+            t("settings.restart_btn") + "?"
+        ):
+            self.restart_program()
+
     def reset_to_factory_themes(self):
-        if messagebox.askyesno("Скидання", "Ви впевнені, що хочете видалити ВСІ створені та імпортовані теми?"):
+        if messagebox.askyesno(t("settings.reset_themes_confirm_title"), t("settings.reset_themes_confirm_text")):
             try:
                 for file in os.listdir(self.themes_dir):
                     if file != "default_launcher.json" and file.endswith(".json"):
@@ -1191,12 +1224,12 @@ class SettingsManager(ctk.CTkFrame):
                 self.color_dropdown.configure(values=self.get_available_themes())
                 self.color_dropdown.set("default_launcher")
                 self.change_color_theme("default_launcher")
-                messagebox.showinfo("Скидання", "Кастомні теми видалено! Застосовано стандартний стиль.")
+                messagebox.showinfo(t("settings.reset_themes_confirm_title"), t("settings.reset_themes_done_text"))
             except Exception as e:
-                messagebox.showerror("Помилка", f"Помилка очищення тем: {e}")
+                messagebox.showerror(t("settings.error_title"), t("settings.reset_themes_error", error=e))
 
     def on_slider_move(self, value):
-        self.delay_label.configure(text=f"Затримка між запуском програм: {int(value)} сек.")
+        self.delay_label.configure(text=t("settings.delay_label", seconds=int(value)))
         self.save_settings()
 
     def update_close_protocol(self):
@@ -1219,8 +1252,8 @@ class SettingsManager(ctk.CTkFrame):
         гарячих клавіш вище. """
         if not self.programs_provider:
             messagebox.showwarning(
-                "Недоступно",
-                "Список програм недоступний — спробуйте перезапустити лаунчер."
+                t("settings.stats_unavailable_title"),
+                t("settings.stats_unavailable_text")
             )
             return
         StatsDialog(self.app, self.programs_provider, on_reset=self.stats_reset_callback)
@@ -1246,13 +1279,14 @@ class SettingsManager(ctk.CTkFrame):
             "delay": int(self.delay_slider.get()),
             "windows_autostart": self.autostart_checkbox.get() == 1,
             "smart_launch": self.smart_launch_checkbox.get() == 1,
-            "show_hotkey": self._validated_show_hotkey
+            "show_hotkey": self._validated_show_hotkey,
+            "language": self._lang_names_by_code.get(self.language_dropdown.get(), locale_manager.DEFAULT_LANGUAGE)
         }
         try:
             with open(self.settings_file, "w", encoding="utf-8") as f:
                 json.dump(settings, f, indent=4, ensure_ascii=False)
         except Exception as e:
-            print(f"Помилка збереження налаштувань: {e}")
+            print(t("settings.save_error", error=e))
 
     def load_and_apply_saved_widgets(self):
         if os.path.exists(self.settings_file):
@@ -1262,6 +1296,9 @@ class SettingsManager(ctk.CTkFrame):
 
                 self.theme_dropdown.set(st.get("theme", "Dark"))
                 self.color_dropdown.set(st.get("color_theme", "default_launcher"))
+
+                saved_lang = st.get("language", locale_manager.DEFAULT_LANGUAGE)
+                self.language_dropdown.set(self._lang_codes_by_name.get(saved_lang, self._lang_codes_by_name[locale_manager.DEFAULT_LANGUAGE]))
 
                 if st.get("close_after_launch", False):
                     self.close_checkbox.select()
@@ -1285,14 +1322,15 @@ class SettingsManager(ctk.CTkFrame):
 
                 delay_val = st.get("delay", 0)
                 self.delay_slider.set(delay_val)
-                self.delay_label.configure(text=f"Затримка між запуском програм: {delay_val} сек.")
+                self.delay_label.configure(text=t("settings.delay_label", seconds=delay_val))
 
                 self._validated_show_hotkey = (st.get("show_hotkey", "ctrl+alt+l") or "").strip().lower()
             except Exception as e:
-                print(f"Помилка завантаження налаштувань: {e}")
+                print(t("settings.load_error", error=e))
         else:
             self.theme_dropdown.set("Dark")
             self.color_dropdown.set("default_launcher")
+            self.language_dropdown.set(self._lang_codes_by_name[locale_manager.DEFAULT_LANGUAGE])
             self.tray_checkbox.select()
             if self.is_windows_autostart_active():
                 self.autostart_checkbox.select()

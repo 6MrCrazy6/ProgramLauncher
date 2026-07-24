@@ -28,6 +28,12 @@ import stats_manager
 # опціональний функціонал на базі бібліотеки 'keyboard'
 import hotkey_manager
 
+# Локалізація інтерфейсу (українська/англійська). Мова визначається
+# одразу при імпорті модуля (читає settings.json) — тому t(...) вже
+# повертає правильну мову навіть для тексту, створеного до появи
+# SettingsManager (заголовок вікна, іконка трею тощо).
+from locale_manager import t
+
 # --- НАЛАШТУВАННЯ CTYPES ДЛЯ DRAG & DROP НА WINDOWS ---
 # Зберігаємо глобальне посилання на callback-функцію, щоб її не видалив GC (Garbage Collector)
 _global_wndproc_ref = None
@@ -171,10 +177,19 @@ tray_icon = None
 
 
 def create_tray_image():
-    image = Image.new('RGB', (64, 64), color=(0, 46, 93))
-    dc = ImageDraw.Draw(image)
-    dc.rectangle((16, 16, 48, 48), fill=(225, 225, 225))
-    return image
+    """ Іконка для системного трею. Завантажує той самий launcher.ico,
+    що й іконка вікна/exe — трей вимагає растрове зображення (PIL.Image),
+    тож .ico конвертується через Image.open (Pillow вміє читати .ico
+    напряму, включно з багаторозмірними файлами — сам обере найбільший
+    кадр). Якщо файл не знайдено чи він пошкоджений — тихо повертаємось
+    до простого намальованого квадрата, щоб трей не зламався. """
+    try:
+        return Image.open(resource_path(os.path.join("Icons", "launcher.ico")))
+    except Exception:
+        image = Image.new('RGB', (64, 64), color=(0, 46, 93))
+        dc = ImageDraw.Draw(image)
+        dc.rectangle((16, 16, 48, 48), fill=(225, 225, 225))
+        return image
 
 
 def show_window():
@@ -266,8 +281,8 @@ def restart_program():
 def setup_tray():
     global tray_icon
     menu = pystray.Menu(
-        item('📱 Відкрити лаунчер', show_window, default=True),
-        item('❌ Повний вихід', exit_program)
+        item(t("main.tray_open"), show_window, default=True),
+        item(t("main.tray_exit"), exit_program)
     )
     tray_icon = pystray.Icon("launcher_tray", create_tray_image(), "Program Launcher", menu)
     tray_icon.run_detached()
@@ -287,31 +302,32 @@ def toggle_interface(value):
     settings_manager_frame.pack_forget()
     info_manager_frame.pack_forget()
 
-    if value == "📱 Програми":
+    if value == t("main.tab_programs"):
         main_ui_frame.pack(pady=5, padx=20, fill="both", expand=True)
         # Лічильники запусків (▶ N) могли змінитися, поки користувач був
         # на вкладці "Набори" чи "Розклад" (звідти теж можна запускати
         # програми) — оновлюємо підписи, щоб цифри не були застарілими
         refresh_programs()
-    elif value == "⚙ Набори":
+    elif value == t("main.tab_presets"):
         preset_manager_frame.pack(pady=5, padx=20, fill="both", expand=True)
         preset_manager_frame.load_data_from_json(programs)
-    elif value == "⏰ Розклад":
+    elif value == t("main.tab_schedule"):
         schedule_manager_frame.pack(pady=5, padx=20, fill="both", expand=True)
         schedule_manager_frame.update_data_lists(programs)
-    elif value == "🛠 Налаштування":
+    elif value == t("main.tab_settings"):
         settings_manager_frame.pack(pady=5, padx=20, fill="both", expand=True)
-    elif value == "ℹ Довідка":
+    elif value == t("main.tab_info"):
         info_manager_frame.pack(pady=5, padx=20, fill="both", expand=True)
 
 
 mode_toggle = ctk.CTkSegmentedButton(
     app,
-    values=["📱 Програми", "⚙ Набори", "⏰ Розклад", "🛠 Налаштування", "ℹ Довідка"],
+    values=[t("main.tab_programs"), t("main.tab_presets"), t("main.tab_schedule"),
+            t("main.tab_settings"), t("main.tab_info")],
     command=toggle_interface
 )
 mode_toggle.pack(pady=15, padx=15, fill="x")
-mode_toggle.set("📱 Програми")
+mode_toggle.set(t("main.tab_programs"))
 
 main_ui_frame = ctk.CTkFrame(app, fg_color="transparent")
 main_ui_frame.pack(pady=5, padx=20, fill="both", expand=True)
@@ -320,13 +336,13 @@ main_ui_frame.pack(pady=5, padx=20, fill="both", expand=True)
 # Дозволяє групувати програми у категорії (теги) на кшталт "Робота",
 # "Ігри", "Дизайн", і фільтрувати список кліком по випадаючому списку —
 # щоб довгий список (50+ програм) не перетворювався на нескінченний скрол.
-CATEGORY_ALL = "Всі"
-CATEGORY_UNSET = "Без категорії"
+CATEGORY_ALL = t("main.category_all")
+CATEGORY_UNSET = t("main.category_unset")
 
 category_filter_frame = ctk.CTkFrame(main_ui_frame, fg_color="transparent")
 category_filter_frame.pack(pady=(0, 8), fill="x")
 
-ctk.CTkLabel(category_filter_frame, text="🏷 Категорія:").pack(side="left", padx=(0, 8))
+ctk.CTkLabel(category_filter_frame, text=t("main.category_label")).pack(side="left", padx=(0, 8))
 
 category_filter_dropdown = ctk.CTkOptionMenu(
     category_filter_frame,
@@ -338,7 +354,7 @@ category_filter_dropdown.set(CATEGORY_ALL)
 
 # Кнопка керування категоріями (перегляд та видалення) поруч із фільтром
 manage_categories_btn = ctk.CTkButton(
-    category_filter_frame, text="🗑", width=32,
+    category_filter_frame, text=t("main.manage_categories_btn"), width=32,
     fg_color="transparent", border_width=1,
     text_color=("#001F3F", "#E5E9F0"),
     command=lambda: manage_categories_dialog()
@@ -441,7 +457,7 @@ def refresh_programs():
     if not programs:
         placeholder = ctk.CTkLabel(
             program_frame,
-            text="✨ Список порожній...\n\nПеретягніть сюди ярлики файлів мишкою\nабо скористайтеся кнопкою 'Додати'",
+            text=t("main.empty_list"),
             text_color="gray", justify="center"
         )
         placeholder.pack(pady=40, fill="x")
@@ -455,7 +471,7 @@ def refresh_programs():
     if not visible_programs:
         placeholder = ctk.CTkLabel(
             program_frame,
-            text=f"У категорії «{selected_category}» ще немає програм.",
+            text=t("main.empty_category", category=selected_category),
             text_color="gray", justify="center"
         )
         placeholder.pack(pady=40, fill="x")
@@ -471,12 +487,12 @@ def refresh_programs():
 
 def show_context_menu(event, program):
     context_menu.delete(0, "end")
-    context_menu.add_command(label=f"Перейменувати '{program['name']}'", command=lambda: rename_program(program))
-    context_menu.add_command(label="⚙ Параметри запуску...", command=lambda: edit_program_args(program))
-    context_menu.add_command(label="🏷 Категорія...", command=lambda: edit_program_category(program))
-    context_menu.add_command(label="🔄 Скинути лічильник запусків", command=lambda: reset_program_stats(program))
+    context_menu.add_command(label=t("main.ctx_rename", name=program['name']), command=lambda: rename_program(program))
+    context_menu.add_command(label=t("main.ctx_args"), command=lambda: edit_program_args(program))
+    context_menu.add_command(label=t("main.ctx_category"), command=lambda: edit_program_category(program))
+    context_menu.add_command(label=t("main.ctx_reset_stats"), command=lambda: reset_program_stats(program))
     context_menu.add_separator()
-    context_menu.add_command(label="Видалити зі списку", command=lambda: delete_single_program(program))
+    context_menu.add_command(label=t("main.ctx_delete"), command=lambda: delete_single_program(program))
     context_menu.tk_popup(event.x_root, event.y_root)
 
 
@@ -488,7 +504,7 @@ def reset_program_stats(program):
 
 
 def rename_program(program):
-    dialog = ctk.CTkInputDialog(text=f"Введіть нову назву для {program['name']}:", title="Перейменування")
+    dialog = ctk.CTkInputDialog(text=t("main.rename_prompt", name=program['name']), title=t("main.rename_title"))
     new_name = dialog.get_input()
     if new_name and new_name.strip():
         program["name"] = new_name.strip()
@@ -501,12 +517,12 @@ def edit_program_args(program):
     наприклад "-windowed" для гри або URL для браузера. Порожній рядок
     прибирає аргументи — програма запускатиметься звичайно. """
     current_args = program.get("args", "")
-    hint = f"Аргументи запуску для '{program['name']}':\n"
+    hint = t("main.args_prompt_header", name=program['name'])
     if current_args:
-        hint += f"Поточне значення: {current_args}\n"
-    hint += "Залиште порожнім, щоб прибрати аргументи (напр. -windowed, або URL для браузера)."
+        hint += t("main.args_prompt_current", args=current_args)
+    hint += t("main.args_prompt_hint")
 
-    dialog = ctk.CTkInputDialog(text=hint, title="Параметри запуску")
+    dialog = ctk.CTkInputDialog(text=hint, title=t("main.args_title"))
     new_args = dialog.get_input()
     if new_args is not None:
         program["args"] = new_args.strip()
@@ -523,7 +539,7 @@ def ask_category_dialog(parent_window, program_name, current_value, existing_cat
     result = {"value": None, "confirmed": False}
 
     dialog = ctk.CTkToplevel(parent_window)
-    dialog.title("Категорія програми")
+    dialog.title(t("main.category_dialog_title"))
     dialog.geometry("380x340")
     dialog.minsize(320, 260)
     dialog.transient(parent_window)
@@ -536,24 +552,24 @@ def ask_category_dialog(parent_window, program_name, current_value, existing_cat
 
     ctk.CTkLabel(
         dialog,
-        text=f"Категорія для «{program_name}»:",
+        text=t("main.category_dialog_label", name=program_name),
         wraplength=340, justify="left", anchor="w"
     ).pack(pady=(15, 8), padx=15, anchor="w")
 
-    entry = ctk.CTkEntry(dialog, placeholder_text="Назва категорії (нова або вже наявна)")
+    entry = ctk.CTkEntry(dialog, placeholder_text=t("main.category_dialog_placeholder"))
     entry.pack(pady=(0, 4), padx=15, fill="x")
     if current_value:
         entry.insert(0, current_value)
 
     ctk.CTkLabel(
         dialog,
-        text="Порожнє поле прибере категорію.",
+        text=t("main.category_dialog_clear_hint"),
         font=(None, 11), text_color="gray", anchor="w"
     ).pack(pady=(0, 10), padx=15, anchor="w")
 
     if existing_categories:
         ctk.CTkLabel(
-            dialog, text="Або оберіть зі списку створених:",
+            dialog, text=t("main.category_dialog_pick_hint"),
             font=(None, 11, "bold"), anchor="w"
         ).pack(padx=15, anchor="w")
 
@@ -576,7 +592,7 @@ def ask_category_dialog(parent_window, program_name, current_value, existing_cat
             ).pack(pady=2, fill="x")
     else:
         ctk.CTkLabel(
-            dialog, text="Категорій ще немає — просто введіть нову назву вище,\nвона створиться автоматично.",
+            dialog, text=t("main.category_dialog_none_yet"),
             font=(None, 11), text_color="gray", justify="left", anchor="w"
         ).pack(pady=(4, 10), padx=15, anchor="w", fill="x")
 
@@ -591,10 +607,10 @@ def ask_category_dialog(parent_window, program_name, current_value, existing_cat
     def cancel():
         dialog.destroy()
 
-    ctk.CTkButton(btns_frame, text="💾 Зберегти", command=confirm).pack(
+    ctk.CTkButton(btns_frame, text=t("main.category_dialog_save"), command=confirm).pack(
         side="left", expand=True, fill="x", padx=(0, 5)
     )
-    ctk.CTkButton(btns_frame, text="Скасувати", fg_color="transparent", border_width=1,
+    ctk.CTkButton(btns_frame, text=t("main.category_dialog_cancel"), fg_color="transparent", border_width=1,
                   text_color=("#001F3F", "#E5E9F0"), command=cancel).pack(
         side="left", expand=True, fill="x", padx=(5, 0)
     )
@@ -631,7 +647,7 @@ def manage_categories_dialog():
     existing = [c for c in get_all_categories() if c != CATEGORY_UNSET]
 
     dialog = ctk.CTkToplevel(app)
-    dialog.title("Керування категоріями")
+    dialog.title(t("main.manage_categories_title"))
     dialog.geometry("360x380")
     dialog.minsize(300, 260)
     dialog.transient(app)
@@ -642,13 +658,12 @@ def manage_categories_dialog():
     dialog.geometry(f"+{max(px, 0)}+{max(py, 0)}")
 
     ctk.CTkLabel(
-        dialog, text="🏷 Керування категоріями", font=(None, 14, "bold")
+        dialog, text=t("main.manage_categories_header"), font=(None, 14, "bold")
     ).pack(pady=(15, 5), padx=15, anchor="w")
 
     ctk.CTkLabel(
         dialog,
-        text="Видалення категорії не стирає самі програми — вони\n"
-             "просто повертаються у стан «Без категорії».",
+        text=t("main.manage_categories_hint"),
         font=(None, 11), text_color="gray", justify="left", anchor="w"
     ).pack(pady=(0, 10), padx=15, anchor="w")
 
@@ -657,9 +672,8 @@ def manage_categories_dialog():
 
     def do_delete(cat_name):
         if messagebox.askyesno(
-            "Видалення категорії",
-            f"Видалити категорію «{cat_name}»?\n\n"
-            f"Програми, що мали цю категорію, стануть «Без категорії»."
+            t("main.delete_category_confirm_title"),
+            t("main.delete_category_confirm_text", category=cat_name)
         ):
             delete_category(cat_name)
             dialog.destroy()
@@ -671,18 +685,18 @@ def manage_categories_dialog():
             row.pack(pady=3, fill="x")
             ctk.CTkLabel(row, text=cat, anchor="w").pack(side="left", fill="x", expand=True, padx=(2, 5))
             ctk.CTkButton(
-                row, text="🗑 Видалити", width=100,
+                row, text=t("main.manage_categories_delete_btn"), width=100,
                 fg_color="transparent", border_width=1,
                 text_color=("#001F3F", "#E5E9F0"),
                 command=lambda c=cat: do_delete(c)
             ).pack(side="right")
     else:
         ctk.CTkLabel(
-            list_frame, text="Категорій ще немає.\nСтворити категорію можна через\nправий клік по програмі -> \"🏷 Категорія...\"",
+            list_frame, text=t("main.manage_categories_empty"),
             text_color="gray", justify="center"
         ).pack(pady=20, padx=5)
 
-    ctk.CTkButton(dialog, text="Закрити", command=dialog.destroy).pack(pady=(0, 15), padx=15, fill="x")
+    ctk.CTkButton(dialog, text=t("main.manage_categories_close"), command=dialog.destroy).pack(pady=(0, 15), padx=15, fill="x")
 
     dialog.grab_set()
 
@@ -882,16 +896,16 @@ info_manager_frame = InfoManager(app)
 button_frame = ctk.CTkFrame(main_ui_frame, fg_color="transparent")
 button_frame.pack(pady=10, fill="x")
 
-ctk.CTkButton(button_frame, text="Додати", command=add_program).pack(side="left", padx=5, expand=True, fill="x")
-ctk.CTkButton(button_frame, text="Запустити", command=launch_selected).pack(side="left", padx=5, expand=True, fill="x")
-ctk.CTkButton(button_frame, text="Видалити", command=delete_selected).pack(side="left", padx=5, expand=True, fill="x")
+ctk.CTkButton(button_frame, text=t("main.btn_add"), command=add_program).pack(side="left", padx=5, expand=True, fill="x")
+ctk.CTkButton(button_frame, text=t("main.btn_launch"), command=launch_selected).pack(side="left", padx=5, expand=True, fill="x")
+ctk.CTkButton(button_frame, text=t("main.btn_delete"), command=delete_selected).pack(side="left", padx=5, expand=True, fill="x")
 
 exit_button_frame = ctk.CTkFrame(app, fg_color="transparent")
 exit_button_frame.pack(side="bottom", fill="x", padx=20, pady=15)
 
 global_exit_btn = ctk.CTkButton(
     exit_button_frame,
-    text="❌ Повний вихід з програми",
+    text=t("main.btn_full_exit"),
     fg_color="transparent",
     border_width=1,
     text_color=("#001F3F", "#E5E9F0"),

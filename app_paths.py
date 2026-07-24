@@ -60,3 +60,20 @@ def themes_path(filename=None):
     Без filename повертає саму директорію themes/. """
     themes_dir = get_themes_dir()
     return os.path.join(themes_dir, filename) if filename else themes_dir
+
+
+def get_locales_dir():
+    """ Папка locales/, створюється за потреби. Тут лежать JSON-файли
+    перекладу інтерфейсу (uk.json, en.json, ...) — по одному файлу на
+    мову. Живе поруч із jsons_saves/ та themes/ з тієї ж причини:
+    щоб пережити перенесення програми на інший диск чи в іншу теку. """
+    path = os.path.join(get_base_dir(), "locales")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def locales_path(filename=None):
+    """ Повний шлях до файлу всередині locales/ (папка гарантовано існує).
+    Без filename повертає саму директорію locales/. """
+    locales_dir = get_locales_dir()
+    return os.path.join(locales_dir, filename) if filename else locales_dir
